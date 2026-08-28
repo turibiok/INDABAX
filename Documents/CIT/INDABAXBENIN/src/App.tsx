@@ -26,6 +26,7 @@ import {
   FileText,
   Bell,
   MessageSquare,
+  Loader2,
   X,
 } from 'lucide-react';
 
@@ -70,16 +71,21 @@ const AppContent: React.FC = () => {
     setFeedbackSession(session);
   };
 
-  // Tant que personne n'est authentifie, seul l'ecran de connexion est accessible.
-  // La modale de configuration reste disponible : sans elle, il serait impossible
-  // de lier le classeur au premier demarrage.
-  if (authStatus === 'anonymous') {
+  // Le serveur est interroge au demarrage pour savoir si une session existe.
+  if (authStatus === 'loading') {
     return (
-      <>
-        <LoginView />
-        <SheetsSetupModal isOpen={isSheetsSetupOpen} onClose={() => setIsSheetsSetupOpen(false)} />
-      </>
+      <div className="min-h-screen bg-[#FDFCFB] dark:bg-stone-950 flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-6 h-6 animate-spin text-emerald-700 dark:text-emerald-400" />
+        <p className="text-xs font-bold text-stone-600 dark:text-stone-400">Vérification de la session…</p>
+      </div>
     );
+  }
+
+  // Tant que personne n'est authentifie, seul l'ecran de connexion est accessible.
+  // La configuration du classeur exige une session habilitee : le tout premier
+  // acces passe par la variable ADMIN_EMAILS du serveur.
+  if (authStatus === 'anonymous') {
+    return <LoginView />;
   }
 
   // Un onglet devenu interdit (changement de role en cours de session) retombe

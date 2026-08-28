@@ -10,8 +10,10 @@ import {
   FileText,
   Link2,
   Loader2,
+  Lock,
   Plus,
   RefreshCw,
+  Save,
   Trash2,
   Unlink,
   Upload,
@@ -39,12 +41,16 @@ const DOC_KINDS: { value: DocLinkKind; label: string }[] = [
 
 /**
  * Configuration de la base de donnees : uniquement des LIENS.
- * Aucun projet Google Cloud, aucune configuration Firebase.
+ *
+ * La configuration est enregistree sur le SERVEUR. Les secrets d'ecriture
+ * (URL Apps Script, cle AppSheet) ne redescendent jamais dans le navigateur :
+ * les champs correspondants sont en ecriture seule, et laisser un champ vide
+ * conserve la valeur deja enregistree.
  */
 export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onClose }) => {
   const {
     sheetsConfig,
-    updateSheetsConfig,
+    saveSheetsSettings,
     isSheetsLinked,
     canWriteToSheets,
     linkSheetsDatabase,
@@ -57,12 +63,28 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
     docLinks,
     saveDocLink,
     removeDocLink,
+    capabilities,
   } = useEvent();
 
   const [panel, setPanel] = useState<Panel>('database');
-  const [sheetUrlDraft, setSheetUrlDraft] = useState(sheetsConfig.masterSheetUrl);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Brouillons : on n'ecrit sur le serveur que lorsque l'utilisateur valide.
+  const [sheetUrlDraft, setSheetUrlDraft] = useState(sheetsConfig.masterSheetUrl);
+  const [tabsDraft, setTabsDraft] = useState({
+    usersTab: sheetsConfig.usersTab,
+    participantsTab: sheetsConfig.participantsTab,
+    sessionsTab: sheetsConfig.sessionsTab,
+    checkInsTab: sheetsConfig.checkInsTab,
+    feedbacksTab: sheetsConfig.feedbacksTab,
+  });
+  const [secretsDraft, setSecretsDraft] = useState({
+    writeWebhookUrl: '',
+    appSheetAppId: '',
+    appSheetAccessKey: '',
+  });
+
   const [newLink, setNewLink] = useState<{ label: string; url: string; kind: DocLinkKind }>({
     label: '',
     url: '',
@@ -71,15 +93,39 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
 
   if (!isOpen) return null;
 
+  const canManage = capabilities.canManageIntegrations;
+
   const run = async (action: () => Promise<string>) => {
     setFeedback(null);
     try {
-      const message = await action();
-      setFeedback({ kind: 'ok', text: message });
+      setFeedback({ kind: 'ok', text: await action() });
     } catch (error: any) {
       setFeedback({ kind: 'error', text: error?.message || 'Opération impossible.' });
     }
   };
+
+  const handleSaveTabs = () =>
+    run(async () => {
+      await saveSheetsSettings(tabsDraft);
+      return "Noms d'onglets enregistrés sur le serveur.";
+    });
+
+  const handleSaveSecrets = () =>
+    run(async () => {
+      // Un champ laisse vide n'ecrase pas la valeur deja enregistree.
+      const patch: Record<string, string> = {};
+      for (const [key, value] of Object.entries(secretsDraft)) {
+        if (value.trim()) patch[key] = value.trim();
+      }
+
+      if (Object.keys(patch).length === 0) {
+        throw new Error("Renseignez au moins un champ. Un champ vide conserve la valeur enregistrée.");
+      }
+
+      await saveSheetsSettings(patch);
+      setSecretsDraft({ writeWebhookUrl: '', appSheetAppId: '', appSheetAccessKey: '' });
+      return "Voie d'écriture enregistrée sur le serveur.";
+    });
 
   const handleCopySnippet = async () => {
     try {
@@ -124,7 +170,7 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
   );
 
   const fieldClass =
-    'w-full px-3 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition';
+    'w-full px-3 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition disabled:opacity-60 disabled:cursor-not-allowed';
   const labelClass =
     'text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400 block mb-1';
 
@@ -154,8 +200,8 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
           </div>
 
           <p className="text-xs text-emerald-100 max-w-md">
-            L&apos;application lit et écrit dans un classeur Google Sheet partagé par lien. Aucun projet Google
-            Cloud ni Firebase n&apos;est nécessaire.
+            Le serveur lit et écrit dans un classeur Google Sheet partagé par lien. Aucun projet Google Cloud
+            ni Firebase n&apos;est nécessaire.
           </p>
         </div>
 
@@ -168,6 +214,16 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
 
         {/* Contenu */}
         <div className="p-6 space-y-5 overflow-y-auto">
+          {!canManage && (
+            <div className="p-3 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-2xl text-[11px] font-semibold text-stone-700 dark:text-stone-300 flex items-start gap-2">
+              <Lock className="w-4 h-4 shrink-0 mt-px text-stone-500" />
+              <span>
+                Votre rôle permet de consulter cette configuration mais pas de la modifier. Le serveur refuserait
+                toute modification.
+              </span>
+            </div>
+          )}
+
           {feedback && (
             <div
               className={`p-3 rounded-2xl text-xs font-semibold flex items-start gap-2 animate-in fade-in ${
@@ -196,7 +252,7 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                       {isSheetsLinked ? 'Classeur lié' : 'Aucun classeur lié'}
                     </p>
                     <p className="text-[11px] text-stone-600 dark:text-stone-400">
-                      {userAccounts.length} compte(s) en mémoire
+                      {userAccounts.length} compte(s) sur le serveur
                       {sheetsConfig.lastSyncTimestamp
                         ? ` • dernière lecture ${new Date(sheetsConfig.lastSyncTimestamp).toLocaleString('fr-FR')}`
                         : ''}
@@ -215,16 +271,15 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>
-                    <button
-                      onClick={() => {
-                        unlinkSheetsDatabase();
-                        setFeedback({ kind: 'ok', text: "Classeur délié : l'application repasse en base locale." });
-                      }}
-                      className="p-2 text-stone-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition cursor-pointer"
-                      title="Délier"
-                    >
-                      <Unlink className="w-4 h-4" />
-                    </button>
+                    {canManage && (
+                      <button
+                        onClick={() => run(unlinkSheetsDatabase)}
+                        className="p-2 text-stone-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition cursor-pointer"
+                        title="Délier"
+                      >
+                        <Unlink className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -245,6 +300,7 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                   <input
                     id="sheet-url"
                     type="url"
+                    disabled={!canManage}
                     value={sheetUrlDraft}
                     onChange={event => setSheetUrlDraft(event.target.value)}
                     placeholder="https://docs.google.com/spreadsheets/d/…"
@@ -258,67 +314,41 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <label htmlFor="tab-users" className={labelClass}>
-                    Onglet comptes
-                  </label>
-                  <input
-                    id="tab-users"
-                    value={sheetsConfig.usersTab}
-                    onChange={event => updateSheetsConfig({ usersTab: event.target.value })}
-                    className={fieldClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="tab-participants" className={labelClass}>
-                    Onglet participants
-                  </label>
-                  <input
-                    id="tab-participants"
-                    value={sheetsConfig.participantsTab}
-                    onChange={event => updateSheetsConfig({ participantsTab: event.target.value })}
-                    className={fieldClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="tab-sessions" className={labelClass}>
-                    Onglet sessions
-                  </label>
-                  <input
-                    id="tab-sessions"
-                    value={sheetsConfig.sessionsTab}
-                    onChange={event => updateSheetsConfig({ sessionsTab: event.target.value })}
-                    className={fieldClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="tab-checkins" className={labelClass}>
-                    Onglet présences
-                  </label>
-                  <input
-                    id="tab-checkins"
-                    value={sheetsConfig.checkInsTab}
-                    onChange={event => updateSheetsConfig({ checkInsTab: event.target.value })}
-                    className={fieldClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="tab-feedbacks" className={labelClass}>
-                    Onglet feedbacks
-                  </label>
-                  <input
-                    id="tab-feedbacks"
-                    value={sheetsConfig.feedbacksTab}
-                    onChange={event => updateSheetsConfig({ feedbacksTab: event.target.value })}
-                    className={fieldClass}
-                  />
-                </div>
+                {(
+                  [
+                    ['usersTab', 'Onglet comptes'],
+                    ['participantsTab', 'Onglet participants'],
+                    ['sessionsTab', 'Onglet sessions'],
+                    ['checkInsTab', 'Onglet présences'],
+                    ['feedbacksTab', 'Onglet feedbacks'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key}>
+                    <label htmlFor={`tab-${key}`} className={labelClass}>
+                      {label}
+                    </label>
+                    <input
+                      id={`tab-${key}`}
+                      disabled={!canManage}
+                      value={tabsDraft[key]}
+                      onChange={event => setTabsDraft(prev => ({ ...prev, [key]: event.target.value }))}
+                      className={fieldClass}
+                    />
+                  </div>
+                ))}
+
                 <div className="flex items-end">
                   <label className="flex items-center gap-2 text-[11px] font-bold text-stone-700 dark:text-stone-300 cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={!canManage}
                       checked={sheetsConfig.autoSync}
-                      onChange={event => updateSheetsConfig({ autoSync: event.target.checked })}
+                      onChange={event => run(async () => {
+                        await saveSheetsSettings({ autoSync: event.target.checked });
+                        return event.target.checked
+                          ? 'Synchronisation automatique activée.'
+                          : 'Synchronisation automatique désactivée.';
+                      })}
                       className="w-4 h-4 accent-emerald-600"
                     />
                     Sync automatique
@@ -326,44 +356,57 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => run(() => linkSheetsDatabase(sheetUrlDraft))}
-                  disabled={isSyncing || !sheetUrlDraft.trim()}
-                  className="flex-1 min-w-[180px] py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-                >
-                  {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-                  {isSheetsLinked ? 'Revérifier et relier' : 'Tester et lier le classeur'}
-                </button>
+              {canManage && (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => run(() => linkSheetsDatabase(sheetUrlDraft, tabsDraft.usersTab))}
+                      disabled={isSyncing || !sheetUrlDraft.trim()}
+                      className="flex-1 min-w-[180px] py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                    >
+                      {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                      {isSheetsLinked ? 'Revérifier et relier' : 'Tester et lier le classeur'}
+                    </button>
 
-                <button
-                  onClick={() => run(reloadAccountsFromSheet)}
-                  disabled={isSyncing || !isSheetsLinked}
-                  className="py-2.5 px-4 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed text-stone-800 dark:text-stone-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                  Recharger les rôles
-                </button>
-              </div>
+                    <button
+                      onClick={handleSaveTabs}
+                      disabled={isSyncing}
+                      className="py-2.5 px-4 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 text-stone-800 dark:text-stone-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                    >
+                      <Save className="w-4 h-4" />
+                      Enregistrer les onglets
+                    </button>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => run(() => importFromSheets('participants'))}
-                  disabled={isSyncing || !isSheetsLinked}
-                  className="py-2.5 px-3 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed text-stone-800 dark:text-stone-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Importer participants
-                </button>
-                <button
-                  onClick={() => run(() => importFromSheets('sessions'))}
-                  disabled={isSyncing || !isSheetsLinked}
-                  className="py-2.5 px-3 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed text-stone-800 dark:text-stone-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Importer sessions
-                </button>
-              </div>
+                    <button
+                      onClick={() => run(reloadAccountsFromSheet)}
+                      disabled={isSyncing || !isSheetsLinked}
+                      className="py-2.5 px-4 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed text-stone-800 dark:text-stone-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                      Recharger les rôles
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => run(() => importFromSheets('participants'))}
+                      disabled={isSyncing || !isSheetsLinked}
+                      className="py-2.5 px-3 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed text-stone-800 dark:text-stone-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Importer participants
+                    </button>
+                    <button
+                      onClick={() => run(() => importFromSheets('sessions'))}
+                      disabled={isSyncing || !isSheetsLinked}
+                      className="py-2.5 px-3 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed text-stone-800 dark:text-stone-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Importer sessions
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* Colonnes attendues */}
               <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 space-y-2">
@@ -379,7 +422,9 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                 ))}
                 <p className="text-[10px] text-stone-500 pt-1 border-t border-stone-200 dark:border-stone-700">
                   Les intitulés sont tolérants aux accents et aux variantes (Email / Adresse email, Rôle / Fonction…).
-                  Seule la colonne <strong>Email</strong> est indispensable dans l&apos;onglet des comptes.
+                  Seule la colonne <strong>Email</strong> est indispensable dans l&apos;onglet des comptes. Si son nom
+                  est mal orthographié, Google renvoie le premier onglet du classeur : la liaison échouera en
+                  signalant les colonnes réellement lues.
                 </p>
               </div>
             </div>
@@ -392,21 +437,34 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                 <span className={`w-2.5 h-2.5 rounded-full ${canWriteToSheets ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 <p className="font-bold text-stone-900 dark:text-stone-100">
                   {canWriteToSheets
-                    ? "Écriture active : présences et feedbacks partent vers le classeur."
+                    ? `Écriture active via ${sheetsConfig.hasWebhook ? 'Apps Script' : 'l’API AppSheet'}.`
                     : "Lecture seule : configurez une voie d'écriture ci-dessous."}
                 </p>
               </div>
 
+              <div className="p-3 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-2xl text-[11px] font-semibold text-stone-700 dark:text-stone-300 flex items-start gap-2">
+                <Lock className="w-4 h-4 shrink-0 mt-px text-emerald-600" />
+                <span>
+                  Ces identifiants sont conservés sur le serveur et ne sont jamais renvoyés au navigateur. Laissez un
+                  champ vide pour conserver la valeur déjà enregistrée.
+                </span>
+              </div>
+
               <div>
                 <label htmlFor="apps-script-url" className={labelClass}>
-                  URL du Apps Script Web App
+                  URL du Apps Script Web App {sheetsConfig.hasWebhook && '• déjà configurée'}
                 </label>
                 <input
                   id="apps-script-url"
                   type="url"
-                  value={sheetsConfig.writeWebhookUrl}
-                  onChange={event => updateSheetsConfig({ writeWebhookUrl: event.target.value })}
-                  placeholder="https://script.google.com/macros/s/…/exec"
+                  disabled={!canManage}
+                  value={secretsDraft.writeWebhookUrl}
+                  onChange={event => setSecretsDraft(prev => ({ ...prev, writeWebhookUrl: event.target.value }))}
+                  placeholder={
+                    sheetsConfig.hasWebhook
+                      ? '•••••••• (enregistrée — saisir pour remplacer)'
+                      : 'https://script.google.com/macros/s/…/exec'
+                  }
                   className={fieldClass}
                 />
                 <p className="text-[11px] text-stone-500 mt-1.5 leading-relaxed">
@@ -435,7 +493,7 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
 
               <div className="pt-2 border-t border-stone-200 dark:border-stone-800 space-y-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">
-                  Ou via l&apos;API AppSheet
+                  Ou via l&apos;API AppSheet {sheetsConfig.hasAppSheetApi && '• déjà configurée'}
                 </p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
@@ -444,9 +502,10 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                     </label>
                     <input
                       id="appsheet-id"
-                      value={sheetsConfig.appSheetAppId}
-                      onChange={event => updateSheetsConfig({ appSheetAppId: event.target.value })}
-                      placeholder="xxxxxxxx-xxxx-xxxx…"
+                      disabled={!canManage}
+                      value={secretsDraft.appSheetAppId}
+                      onChange={event => setSecretsDraft(prev => ({ ...prev, appSheetAppId: event.target.value }))}
+                      placeholder={sheetsConfig.hasAppSheetApi ? '•••••••• (enregistré)' : 'xxxxxxxx-xxxx-xxxx…'}
                       className={fieldClass}
                     />
                   </div>
@@ -457,9 +516,10 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                     <input
                       id="appsheet-key"
                       type="password"
-                      value={sheetsConfig.appSheetAccessKey}
-                      onChange={event => updateSheetsConfig({ appSheetAccessKey: event.target.value })}
-                      placeholder="V2-…"
+                      disabled={!canManage}
+                      value={secretsDraft.appSheetAccessKey}
+                      onChange={event => setSecretsDraft(prev => ({ ...prev, appSheetAccessKey: event.target.value }))}
+                      placeholder={sheetsConfig.hasAppSheetApi ? '•••••••• (enregistrée)' : 'V2-…'}
                       className={fieldClass}
                     />
                   </div>
@@ -470,14 +530,27 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                 </p>
               </div>
 
-              <button
-                onClick={() => run(pushDataToSheets)}
-                disabled={isSyncing || !isSheetsLinked || !canWriteToSheets}
-                className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-stone-950 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-              >
-                {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                Envoyer les présences &amp; feedbacks en attente
-              </button>
+              {canManage && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleSaveSecrets}
+                    disabled={isSyncing}
+                    className="flex-1 min-w-[180px] py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    Enregistrer la voie d&apos;écriture
+                  </button>
+
+                  <button
+                    onClick={() => run(pushDataToSheets)}
+                    disabled={isSyncing || !isSheetsLinked || !canWriteToSheets}
+                    className="flex-1 min-w-[180px] py-2.5 px-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-stone-950 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Envoyer les données en attente
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -490,54 +563,60 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
               </p>
 
               <div className="space-y-2">
-                {docLinks.length === 0 && (
-                  <p className="text-xs text-stone-500 italic">Aucun lien enregistré.</p>
-                )}
+                {docLinks.length === 0 && <p className="text-xs text-stone-500 italic">Aucun lien enregistré.</p>}
 
                 {docLinks.map(link => (
-                  <DocLinkRow key={link.id} link={link} onSave={saveDocLink} onRemove={removeDocLink} />
+                  <DocLinkRow
+                    key={link.id}
+                    link={link}
+                    canEdit={canManage}
+                    onSave={saveDocLink}
+                    onRemove={removeDocLink}
+                  />
                 ))}
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 space-y-2.5">
-                <p className="text-[11px] font-bold text-stone-700 dark:text-stone-300">Nouveau lien</p>
+              {canManage && (
+                <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 space-y-2.5">
+                  <p className="text-[11px] font-bold text-stone-700 dark:text-stone-300">Nouveau lien</p>
 
-                <input
-                  value={newLink.label}
-                  onChange={event => setNewLink(prev => ({ ...prev, label: event.target.value }))}
-                  placeholder="Intitulé (ex. Programme détaillé)"
-                  className={fieldClass}
-                />
-                <input
-                  type="url"
-                  value={newLink.url}
-                  onChange={event => setNewLink(prev => ({ ...prev, url: event.target.value }))}
-                  placeholder="https://docs.google.com/document/d/…"
-                  className={fieldClass}
-                />
-
-                <div className="flex gap-2">
-                  <select
-                    value={newLink.kind}
-                    onChange={event => setNewLink(prev => ({ ...prev, kind: event.target.value as DocLinkKind }))}
+                  <input
+                    value={newLink.label}
+                    onChange={event => setNewLink(prev => ({ ...prev, label: event.target.value }))}
+                    placeholder="Intitulé (ex. Programme détaillé)"
                     className={fieldClass}
-                  >
-                    {DOC_KINDS.map(kind => (
-                      <option key={kind.value} value={kind.value}>
-                        {kind.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  <input
+                    type="url"
+                    value={newLink.url}
+                    onChange={event => setNewLink(prev => ({ ...prev, url: event.target.value }))}
+                    placeholder="https://docs.google.com/document/d/…"
+                    className={fieldClass}
+                  />
 
-                  <button
-                    onClick={handleAddDocLink}
-                    className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Ajouter
-                  </button>
+                  <div className="flex gap-2">
+                    <select
+                      value={newLink.kind}
+                      onChange={event => setNewLink(prev => ({ ...prev, kind: event.target.value as DocLinkKind }))}
+                      className={fieldClass}
+                    >
+                      {DOC_KINDS.map(kind => (
+                        <option key={kind.value} value={kind.value}>
+                          {kind.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={handleAddDocLink}
+                      className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Ajouter
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -559,9 +638,10 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
 /** Une ligne editable de la liste des liens documentaires. */
 const DocLinkRow: React.FC<{
   link: DocLink;
+  canEdit: boolean;
   onSave: (link: DocLink) => void;
   onRemove: (id: string) => void;
-}> = ({ link, onSave, onRemove }) => {
+}> = ({ link, canEdit, onSave, onRemove }) => {
   const [url, setUrl] = useState(link.url);
 
   const isDirty = url.trim() !== link.url.trim();
@@ -571,9 +651,7 @@ const DocLinkRow: React.FC<{
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{link.label}</p>
-          {link.description && (
-            <p className="text-[10px] text-stone-500 leading-relaxed">{link.description}</p>
-          )}
+          {link.description && <p className="text-[10px] text-stone-500 leading-relaxed">{link.description}</p>}
           <p className="text-[10px] text-stone-500 mt-0.5">
             {link.visibleTo === 'all' ? 'Visible par tous' : `Visible par : ${link.visibleTo.join(', ')}`}
           </p>
@@ -591,33 +669,37 @@ const DocLinkRow: React.FC<{
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
-          <button
-            onClick={() => onRemove(link.id)}
-            className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition cursor-pointer"
-            title="Supprimer"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => onRemove(link.id)}
+              className="p-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition cursor-pointer"
+              title="Supprimer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <input
-          type="url"
-          value={url}
-          onChange={event => setUrl(event.target.value)}
-          placeholder="Collez le lien Google Doc…"
-          className="flex-1 px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-[11px] outline-none focus:border-emerald-600 transition"
-        />
-        {isDirty && (
-          <button
-            onClick={() => onSave({ ...link, url: url.trim() })}
-            className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-[11px] font-bold shrink-0 transition cursor-pointer"
-          >
-            Enregistrer
-          </button>
-        )}
-      </div>
+      {canEdit && (
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={url}
+            onChange={event => setUrl(event.target.value)}
+            placeholder="Collez le lien Google Doc…"
+            className="flex-1 px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-[11px] outline-none focus:border-emerald-600 transition"
+          />
+          {isDirty && (
+            <button
+              onClick={() => onSave({ ...link, url: url.trim() })}
+              className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-[11px] font-bold shrink-0 transition cursor-pointer"
+            >
+              Enregistrer
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

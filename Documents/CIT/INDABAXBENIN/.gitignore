@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# État serveur : configuration du classeur, secrets d'écriture, comptes
+.data/

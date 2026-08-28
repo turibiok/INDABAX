@@ -1,105 +1,28 @@
 import {
   Announcement,
   AnnouncementCategory,
-  CheckInRecord,
   Participant,
   Session,
-  SessionFeedback,
   SessionTrack,
   SessionType,
-  SheetsLinkConfig,
-  UserAccount,
 } from '../types';
-import { mapUserAccounts, parseRole, pick, SheetTable } from '../lib/sheets';
+import { parseRole, pick } from '../lib/sheets';
 
 /**
- * Accès à la base de données Google Sheet (le classeur qui alimente AppSheet).
+ * Conversion des lignes du classeur Google Sheet en objets de l'application.
  *
- * Aucune clé d'API, aucun projet Google Cloud, aucun Firebase :
- * seul le LIEN de partage du classeur est nécessaire. La lecture passe par
- * le relais `/api/sheets/read` du serveur de l'application, ce qui évite les
- * restrictions CORS du navigateur.
+ * Ce module ne parle jamais au réseau : les lignes lui sont fournies par
+ * `src/services/api.ts`, qui les obtient du serveur. Le serveur seul connaît
+ * le lien du classeur.
  */
-
-export const DEFAULT_SHEETS_CONFIG: SheetsLinkConfig = {
-  masterSheetUrl: '',
-  usersTab: 'Utilisateurs',
-  participantsTab: 'Participants',
-  sessionsTab: 'Sessions',
-  checkInsTab: 'Check-ins',
-  feedbacksTab: 'Feedbacks',
-  writeWebhookUrl: '',
-  appSheetAppId: '',
-  appSheetAccessKey: '',
-  isLinked: false,
-  autoSync: true,
-};
-
-export class SheetsDbError extends Error {
-  reason?: string;
-
-  constructor(message: string, reason?: string) {
-    super(message);
-    this.name = 'SheetsDbError';
-    this.reason = reason;
-  }
-}
-
-async function postJson<T>(endpoint: string, payload: unknown): Promise<T> {
-  let response: Response;
-
-  try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    throw new SheetsDbError(
-      "Le serveur de l'application est injoignable. Vérifiez votre connexion.",
-      'network',
-    );
-  }
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new SheetsDbError(
-      (data as any)?.error || `La requête a échoué (HTTP ${response.status}).`,
-      (data as any)?.reason,
-    );
-  }
-
-  return data as T;
-}
-
-/** Lit un onglet du classeur lié. */
-export async function readTab(config: SheetsLinkConfig, tab?: string): Promise<SheetTable> {
-  if (!config.masterSheetUrl.trim()) {
-    throw new SheetsDbError(
-      'Aucun classeur Google Sheet lié. Un administrateur doit renseigner le lien dans les paramètres.',
-      'not_linked',
-    );
-  }
-
-  const data = await postJson<{ headers: string[]; rows: Record<string, string>[] }>(
-    '/api/sheets/read',
-    { sheetUrl: config.masterSheetUrl, tab },
-  );
-
-  return { headers: data.headers || [], rows: data.rows || [] };
-}
-
-/** Charge la table des comptes : c'est elle qui porte les rôles attribués par l'admin. */
-export async function loadUserAccounts(config: SheetsLinkConfig): Promise<UserAccount[]> {
-  const table = await readTab(config, config.usersTab);
-  return mapUserAccounts(table);
-}
 
 const FALLBACK_AVATAR =
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=300&auto=format&fit=crop&q=80';
 
-/** Convertit une ligne de l'onglet Participants en participant applicatif. */
+/* ------------------------------------------------------------------ *
+ * Participants
+ * ------------------------------------------------------------------ */
+
 function mapParticipant(row: Record<string, string>, index: number): Participant | null {
   const email = pick(row, 'email', 'adresse email', 'mail', 'courriel').toLowerCase();
   const name = pick(row, 'name', 'nom', 'nom complet', 'participant');
@@ -136,13 +59,15 @@ function mapParticipant(row: Record<string, string>, index: number): Participant
   };
 }
 
-export async function loadParticipants(config: SheetsLinkConfig): Promise<Participant[]> {
-  const table = await readTab(config, config.participantsTab);
-
-  return table.rows
+export function rowsToParticipants(rows: Record<string, string>[]): Participant[] {
+  return rows
     .map((row, index) => mapParticipant(row, index))
     .filter((participant): participant is Participant => participant !== null);
 }
+
+/* ------------------------------------------------------------------ *
+ * Sessions
+ * ------------------------------------------------------------------ */
 
 const KNOWN_TRACKS: SessionTrack[] = [
   'NLP & Langues Africaines',
@@ -170,12 +95,9 @@ function matchOption<T extends string>(raw: string, options: T[], fallback: T): 
   return options.find(option => option.toLowerCase() === needle) || fallback;
 }
 
-/** Convertit une ligne de l'onglet Sessions en session applicative. */
 function mapSession(row: Record<string, string>, index: number): Session | null {
   const title = pick(row, 'title', 'titre', 'session', 'intitule');
   if (!title) return null;
-
-  const capacity = Number(pick(row, 'capacity', 'capacite', 'places')) || 50;
 
   return {
     id: pick(row, 'id', 'identifiant') || `sheet-ses-${index + 1}`,
@@ -196,18 +118,20 @@ function mapSession(row: Record<string, string>, index: number): Session | null 
     prerequisites: pick(row, 'prerequisites', 'prerequis') || undefined,
     resourcesUrl: pick(row, 'resources url', 'ressources', 'lien ressources') || undefined,
     slidesUrl: pick(row, 'slides url', 'slides', 'presentation') || undefined,
-    capacity,
+    capacity: Number(pick(row, 'capacity', 'capacite', 'places')) || 50,
     currentAttendees: Number(pick(row, 'current attendees', 'presences', 'inscrits')) || 0,
   };
 }
 
-export async function loadSessions(config: SheetsLinkConfig): Promise<Session[]> {
-  const table = await readTab(config, config.sessionsTab);
-
-  return table.rows
+export function rowsToSessions(rows: Record<string, string>[]): Session[] {
+  return rows
     .map((row, index) => mapSession(row, index))
     .filter((session): session is Session => session !== null);
 }
+
+/* ------------------------------------------------------------------ *
+ * Annonces
+ * ------------------------------------------------------------------ */
 
 const KNOWN_CATEGORIES: AnnouncementCategory[] = [
   'URGENT',
@@ -218,8 +142,7 @@ const KNOWN_CATEGORIES: AnnouncementCategory[] = [
   'HACKATHON',
 ];
 
-/** Convertit une ligne d'onglet Annonces en annonce applicative. */
-export function mapAnnouncementRow(row: Record<string, string>, index: number): Announcement | null {
+function mapAnnouncement(row: Record<string, string>, index: number): Announcement | null {
   const title = pick(row, 'title', 'titre', 'annonce');
   if (!title) return null;
 
@@ -233,7 +156,9 @@ export function mapAnnouncementRow(row: Record<string, string>, index: number): 
     category: (KNOWN_CATEGORIES.includes(rawCategory as AnnouncementCategory)
       ? rawCategory
       : 'PROGRAMME') as AnnouncementCategory,
-    priority: (['normal', 'high', 'urgent'].includes(rawPriority) ? rawPriority : 'normal') as Announcement['priority'],
+    priority: (['normal', 'high', 'urgent'].includes(rawPriority)
+      ? rawPriority
+      : 'normal') as Announcement['priority'],
     authorName: pick(row, 'author', 'auteur') || 'Comité IndabaX Bénin',
     authorRole: parseRole(pick(row, 'author role', 'role auteur'), 'organizer'),
     authorAvatar: pick(row, 'author avatar', 'avatar') || FALLBACK_AVATAR,
@@ -246,123 +171,14 @@ export function mapAnnouncementRow(row: Record<string, string>, index: number): 
   };
 }
 
-/* ------------------------------------------------------------------ *
- * Écriture (optionnelle)
- * ------------------------------------------------------------------ */
-
-export function hasWriteTarget(config: SheetsLinkConfig): boolean {
-  return Boolean(
-    config.writeWebhookUrl.trim() || (config.appSheetAppId.trim() && config.appSheetAccessKey.trim()),
-  );
-}
-
-async function appendRows(
-  config: SheetsLinkConfig,
-  table: string,
-  rows: Record<string, unknown>[],
-): Promise<boolean> {
-  if (!hasWriteTarget(config) || rows.length === 0) return false;
-
-  try {
-    await postJson('/api/sheets/write', {
-      webhookUrl: config.writeWebhookUrl.trim() || undefined,
-      appSheet:
-        config.appSheetAppId.trim() && config.appSheetAccessKey.trim()
-          ? { appId: config.appSheetAppId.trim(), accessKey: config.appSheetAccessKey.trim() }
-          : undefined,
-      table,
-      rows,
-    });
-    return true;
-  } catch (error) {
-    console.warn(`Écriture dans l'onglet "${table}" impossible :`, error);
-    return false;
-  }
-}
-
-/** Pousse une présence dans le classeur (si une voie d'écriture est configurée). */
-export function appendCheckIn(config: SheetsLinkConfig, record: CheckInRecord): Promise<boolean> {
-  return appendRows(config, config.checkInsTab, [
-    {
-      Horodateur: new Date(record.timestamp).toLocaleString('fr-FR'),
-      Nom: record.participantName,
-      Email: record.participantEmail,
-      Billet: record.ticketNumber,
-      SessionID: record.sessionId,
-      Session: record.sessionTitle,
-      Salle: record.room,
-      'Scanne par': record.scannedBy,
-    },
-  ]);
-}
-
-/** Pousse un feedback dans le classeur (si une voie d'écriture est configurée). */
-export function appendFeedback(config: SheetsLinkConfig, feedback: SessionFeedback): Promise<boolean> {
-  return appendRows(config, config.feedbacksTab, [
-    {
-      Horodateur: new Date(feedback.timestamp).toLocaleString('fr-FR'),
-      Session: feedback.sessionTitle,
-      Nom: feedback.participantName,
-      'Note globale': feedback.overallRating,
-      'Qualite contenu': feedback.contentQuality,
-      'Clarte orateur': feedback.speakerClarity,
-      'Utilite pratique': feedback.practicalRelevance,
-      Commentaires: feedback.comments,
-      Question: feedback.questionForSpeaker || '',
-    },
-  ]);
-}
-
-/** Écrit (ou met à jour) l'attribution de rôle d'un email dans l'onglet des comptes. */
-export function appendRoleAssignment(
-  config: SheetsLinkConfig,
-  account: UserAccount,
-  assignedBy: string,
-): Promise<boolean> {
-  return appendRows(config, config.usersTab, [
-    {
-      Email: account.email,
-      Nom: account.name,
-      Role: account.role,
-      Statut: account.status,
-      Institution: account.institution || '',
-      Poste: account.position || '',
-      'Attribue par': assignedBy,
-      'Date attribution': new Date().toISOString(),
-    },
-  ]);
-}
-
-/** Vérifie qu'un lien de classeur est lisible et renvoie un résumé. */
-export async function testConnection(
-  config: SheetsLinkConfig,
-): Promise<{ ok: true; accounts: number; headers: string[] }> {
-  const table = await readTab(config, config.usersTab);
-  const accounts = mapUserAccounts(table);
-
-  if (table.rows.length === 0) {
-    throw new SheetsDbError(
-      `L'onglet "${config.usersTab}" est vide. Ajoutez au moins les colonnes Email, Nom, Role.`,
-      'empty',
-    );
-  }
-
-  if (accounts.length === 0) {
-    // Google renvoie le premier onglet du classeur quand le nom demandé n'existe
-    // pas : une table sans colonne Email signale donc souvent un nom d'onglet erroné.
-    throw new SheetsDbError(
-      `Aucune colonne « Email » exploitable dans l'onglet « ${config.usersTab} ». ` +
-        `Vérifiez l'orthographe exacte du nom de l'onglet, puis ses colonnes. ` +
-        `Colonnes lues : ${table.headers.filter(Boolean).join(', ') || 'aucune'}.`,
-      'no_accounts',
-    );
-  }
-
-  return { ok: true, accounts: accounts.length, headers: table.headers };
+export function rowsToAnnouncements(rows: Record<string, string>[]): Announcement[] {
+  return rows
+    .map((row, index) => mapAnnouncement(row, index))
+    .filter((announcement): announcement is Announcement => announcement !== null);
 }
 
 /* ------------------------------------------------------------------ *
- * Modèle de classeur / Apps Script à fournir aux organisateurs
+ * Modèle de classeur à fournir aux organisateurs
  * ------------------------------------------------------------------ */
 
 /** En-têtes attendus pour chaque onglet du classeur. */
@@ -377,7 +193,7 @@ export const SHEET_TEMPLATE_HEADERS: Record<string, string[]> = {
 /**
  * Script à coller dans le classeur (Extensions > Apps Script), puis à déployer
  * en « Application Web » accessible à tout le monde. Son URL se colle ensuite
- * dans le champ « Apps Script » des paramètres de l'application.
+ * dans le champ « Apps Script » des paramètres, où elle reste côté serveur.
  */
 export const APPS_SCRIPT_SNIPPET = `function doPost(e) {
   var payload = JSON.parse(e.postData.contents);

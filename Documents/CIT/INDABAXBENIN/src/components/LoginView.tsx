@@ -5,13 +5,12 @@ import {
   Database,
   KeyRound,
   Loader2,
+  Lock,
   Mail,
   ShieldCheck,
   Sparkles,
-  Users,
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
-import { ROLE_LABELS } from '../permissions';
 
 /**
  * Ecran de connexion : l'utilisateur saisit son email, et le role qui lui a ete
@@ -19,15 +18,7 @@ import { ROLE_LABELS } from '../permissions';
  * l'interface qu'il obtient.
  */
 export const LoginView: React.FC = () => {
-  const {
-    signInWithEmail,
-    isAuthenticating,
-    isSheetsLinked,
-    sheetsConfig,
-    eventConfig,
-    setIsSheetsSetupOpen,
-    userAccounts,
-  } = useEvent();
+  const { signInWithEmail, isAuthenticating, isSheetsLinked, sheetsConfig, eventConfig } = useEvent();
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -58,11 +49,6 @@ export const LoginView: React.FC = () => {
       setError(err?.message || 'Connexion impossible.');
     }
   };
-
-  const roleCounts = userAccounts.reduce<Record<string, number>>((acc, account) => {
-    acc[account.role] = (acc[account.role] || 0) + 1;
-    return acc;
-  }, {});
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-stone-950 text-stone-900 dark:text-stone-100 flex flex-col">
@@ -110,8 +96,9 @@ export const LoginView: React.FC = () => {
               <div className="flex items-start gap-3 text-xs">
                 <Database className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <p className="text-emerald-100">
-                  Les comptes vivent dans un <strong className="text-white">classeur Google Sheet</strong> (base AppSheet)
-                  partagé par lien. Aucun mot de passe à créer.
+                  Les comptes vivent dans un <strong className="text-white">classeur Google Sheet</strong> (base
+                  AppSheet) partagé par lien. Aucun mot de passe à créer : c&apos;est le serveur qui vérifie votre
+                  email et ouvre la session.
                 </p>
               </div>
             </div>
@@ -214,42 +201,13 @@ export const LoginView: React.FC = () => {
 
             {/* Etat de la base de donnees */}
             <div className="mt-6 pt-5 border-t border-stone-200 dark:border-stone-800 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-[11px]">
-                  <span
-                    className={`w-2 h-2 rounded-full ${isSheetsLinked ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                  />
-                  <span className="font-bold text-stone-700 dark:text-stone-300">
-                    {isSheetsLinked
-                      ? `Base liée • onglet « ${sheetsConfig.usersTab} »`
-                      : 'Base locale (aucun classeur lié)'}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsSheetsSetupOpen(true)}
-                  className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
-                >
-                  <Database className="w-3.5 h-3.5" />
-                  Configurer
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-stone-400" />
-                {Object.entries(roleCounts).length === 0 ? (
-                  <span className="text-[11px] text-stone-500">Aucun compte enregistré.</span>
-                ) : (
-                  Object.entries(roleCounts).map(([role, count]) => (
-                    <span
-                      key={role}
-                      className="text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 px-2 py-0.5 rounded-full font-bold"
-                    >
-                      {ROLE_LABELS[role as keyof typeof ROLE_LABELS] || role} : {count}
-                    </span>
-                  ))
-                )}
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className={`w-2 h-2 rounded-full ${isSheetsLinked ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                <span className="font-bold text-stone-700 dark:text-stone-300">
+                  {isSheetsLinked
+                    ? `Base liée • onglet « ${sheetsConfig.usersTab} »`
+                    : 'Aucun classeur lié — table locale du serveur'}
+                </span>
               </div>
 
               <p className="text-[11px] text-stone-500 dark:text-stone-500 flex items-start gap-1.5 leading-relaxed">
@@ -263,6 +221,17 @@ export const LoginView: React.FC = () => {
                 </a>{' '}
                 pour être ajouté à la base des comptes.
               </p>
+
+              {!isSheetsLinked && (
+                <p className="text-[11px] text-stone-500 dark:text-stone-500 flex items-start gap-1.5 leading-relaxed">
+                  <Lock className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-px" />
+                  <span>
+                    <strong>Première installation ?</strong> Renseignez <code className="font-mono">ADMIN_EMAILS</code>
+                    {' '}dans le fichier <code className="font-mono">.env</code> du serveur, connectez-vous avec cet
+                    email, puis liez le classeur depuis l&apos;espace Super-Admin.
+                  </span>
+                </p>
+              )}
             </div>
           </div>
         </div>

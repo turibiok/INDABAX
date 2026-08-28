@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { 
-  Session, 
-  Participant, 
-  CheckInRecord, 
-  SessionFeedback, 
-  NetworkingConnection, 
-  SheetsLinkConfig,
-  UserAccount,
+import {
+  Session,
+  Participant,
+  CheckInRecord,
+  SessionFeedback,
+  NetworkingConnection,
+  PublicSheetsConfig,
+  PublicUserAccount,
   AuthSession,
   ParticipantRole,
   DocLink,
@@ -19,39 +19,22 @@ import {
   PushNotificationAlert,
   EventConfig
 } from '../types';
-import { 
-  INITIAL_SESSIONS, 
-  INITIAL_PARTICIPANTS, 
-  INITIAL_CHECKINS, 
+import {
+  INITIAL_SESSIONS,
+  INITIAL_PARTICIPANTS,
+  INITIAL_CHECKINS,
   INITIAL_FEEDBACKS,
   INITIAL_ANNOUNCEMENTS,
   INITIAL_CHANNELS,
   INITIAL_CHAT_MESSAGES,
   INITIAL_SPEAKER_RESOURCES,
   INITIAL_VOLUNTEER_LOGS,
-  INITIAL_EVENT_CONFIG,
-  INITIAL_USER_ACCOUNTS
+  INITIAL_EVENT_CONFIG
 } from '../data/mockData';
 import { syncSessionToGoogle, downloadIcsFile } from '../services/calendarService';
 import { notificationService } from '../services/notificationService';
-import {
-  DEFAULT_SHEETS_CONFIG,
-  appendCheckIn,
-  appendFeedback,
-  appendRoleAssignment,
-  hasWriteTarget,
-  loadParticipants as loadParticipantsFromSheet,
-  loadSessions as loadSessionsFromSheet,
-  loadUserAccounts,
-  testConnection,
-} from '../services/sheetsDb';
-import {
-  clearStoredSession,
-  loadStoredSession,
-  refreshRole,
-  signIn as performSignIn,
-  storeSession,
-} from '../services/authService';
+import { rowsToParticipants, rowsToSessions } from '../services/sheetsDb';
+import * as api from '../services/api';
 import { ROLE_LABELS, RoleCapabilities, capabilitiesFor } from '../permissions';
 import { normalizeEmail } from '../lib/sheets';
 
@@ -72,13 +55,13 @@ interface EventContextType {
   setSearchQuery: (query: string) => void;
   selectedTrack: string;
   setSelectedTrack: (track: string) => void;
-  // Authentification par email (role attribue par l'administrateur)
-  authStatus: 'anonymous' | 'authenticated';
+  // Authentification par email (role attribue par l'administrateur, verifie par le serveur)
+  authStatus: 'loading' | 'anonymous' | 'authenticated';
   authSession: AuthSession | null;
   authWarning: string | null;
   isAuthenticating: boolean;
   signInWithEmail: (email: string, code?: string) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   /** Role reellement attribue au compte connecte. */
   realRole: ParticipantRole;
   /** Role effectivement applique a l'interface (previsualisation Super-Admin incluse). */
@@ -88,20 +71,22 @@ interface EventContextType {
   setPreviewRole: (role: ParticipantRole | null) => void;
   refreshMyRole: () => Promise<string>;
 
-  // Comptes et attribution des roles
-  userAccounts: UserAccount[];
-  assignRole: (email: string, role: ParticipantRole, extra?: Partial<UserAccount>) => Promise<string>;
-  updateAccount: (email: string, updated: Partial<UserAccount>) => void;
-  removeAccount: (email: string) => void;
+  // Comptes et attribution des roles (le serveur refuse si le role ne le permet pas)
+  userAccounts: PublicUserAccount[];
+  assignRole: (email: string, role: ParticipantRole, extra?: AssignRoleExtra) => Promise<string>;
+  setAccountStatus: (email: string, status: PublicUserAccount['status']) => Promise<string>;
+  removeAccount: (email: string) => Promise<string>;
+  refreshAccounts: () => Promise<void>;
   reloadAccountsFromSheet: () => Promise<string>;
 
-  // Base de donnees Google Sheet (liens uniquement, sans Google Cloud ni Firebase)
-  sheetsConfig: SheetsLinkConfig;
-  updateSheetsConfig: (updated: Partial<SheetsLinkConfig>) => void;
+  // Base de donnees Google Sheet (liens uniquement, sans Google Cloud ni Firebase).
+  // Les secrets d'ecriture restent sur le serveur : seule leur existence est connue ici.
+  sheetsConfig: PublicSheetsConfig;
+  saveSheetsSettings: (patch: SheetsSettingsPatch) => Promise<string>;
   isSheetsLinked: boolean;
   canWriteToSheets: boolean;
-  linkSheetsDatabase: (sheetUrl?: string) => Promise<string>;
-  unlinkSheetsDatabase: () => void;
+  linkSheetsDatabase: (sheetUrl: string, usersTab?: string) => Promise<string>;
+  unlinkSheetsDatabase: () => Promise<string>;
   importFromSheets: (what: 'participants' | 'sessions') => Promise<string>;
   pushDataToSheets: () => Promise<string>;
   isSyncing: boolean;
@@ -137,7 +122,7 @@ interface EventContextType {
   // Event Configuration & Super Admin
   eventConfig: EventConfig;
   updateEventConfig: (updated: Partial<EventConfig>) => void;
-  
+
   // Announcements & Discussions
   announcements: Announcement[];
   channels: ChatChannel[];
@@ -203,6 +188,40 @@ interface EventContextType {
   addVolunteerLog: (log: Omit<VolunteerLog, 'id' | 'timestamp' | 'status'>) => void;
   resolveVolunteerLog: (logId: string) => void;
 }
+
+export interface AssignRoleExtra {
+  name?: string;
+  status?: PublicUserAccount['status'];
+  accessCode?: string;
+  institution?: string;
+  position?: string;
+}
+
+export interface SheetsSettingsPatch {
+  usersTab?: string;
+  participantsTab?: string;
+  sessionsTab?: string;
+  checkInsTab?: string;
+  feedbacksTab?: string;
+  autoSync?: boolean;
+  writeWebhookUrl?: string;
+  appSheetAppId?: string;
+  appSheetAccessKey?: string;
+}
+
+const EMPTY_SHEETS_CONFIG: PublicSheetsConfig = {
+  masterSheetUrl: '',
+  usersTab: 'Utilisateurs',
+  participantsTab: 'Participants',
+  sessionsTab: 'Sessions',
+  checkInsTab: 'Check-ins',
+  feedbacksTab: 'Feedbacks',
+  isLinked: false,
+  autoSync: true,
+  canWrite: false,
+  hasWebhook: false,
+  hasAppSheetApi: false,
+};
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
 
@@ -309,16 +328,15 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setScannerTargetSession(null);
   };
 
-  // Authentification : session, comptes et previsualisation de role
-  const [authSession, setAuthSession] = useState<AuthSession | null>(() => loadStoredSession());
+  // Authentification : la session vit sur le serveur, dans un cookie HttpOnly.
+  // Le client ne fait que refleter ce que le serveur lui repond.
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [serverCapabilities, setServerCapabilities] = useState<RoleCapabilities | null>(null);
+  const [authStatus, setAuthStatus] = useState<'loading' | 'anonymous' | 'authenticated'>('loading');
   const [authWarning, setAuthWarning] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [previewRole, setPreviewRole] = useState<ParticipantRole | null>(null);
-
-  const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => {
-    const saved = localStorage.getItem('indabax_user_accounts');
-    return saved ? JSON.parse(saved) : INITIAL_USER_ACCOUNTS;
-  });
+  const [userAccounts, setUserAccounts] = useState<PublicUserAccount[]>([]);
 
   // Push Notifications Alerts State
   const [activeAlerts, setActiveAlerts] = useState<PushNotificationAlert[]>([]);
@@ -340,7 +358,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const testPushNotification = () => {
     const savedSessions = sessions.filter(s => savedSessionIds.includes(s.id));
     const targetSession = savedSessions[0] || sessions[0];
-    
+
     const mockAlert: PushNotificationAlert = {
       id: `alert-test-${Date.now()}`,
       sessionId: targetSession.id,
@@ -392,20 +410,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeChannelId, setActiveChannelId] = useState<string>('chan-general');
   const [activeDirectPartnerId, setActiveDirectPartnerId] = useState<string | null>(null);
 
-  const [sheetsConfig, setSheetsConfig] = useState<SheetsLinkConfig>(() => {
-    const saved = localStorage.getItem('indabax_sheets_config');
-    if (!saved) return DEFAULT_SHEETS_CONFIG;
-    try {
-      // Fusion avec les valeurs par defaut : une config enregistree par une
-      // version anterieure peut ne pas contenir tous les champs.
-      return { ...DEFAULT_SHEETS_CONFIG, ...JSON.parse(saved) };
-    } catch {
-      return DEFAULT_SHEETS_CONFIG;
-    }
-  });
+  // Configuration publique du classeur, servie par le serveur.
+  const [sheetsConfig, setSheetsConfig] = useState<PublicSheetsConfig>(EMPTY_SHEETS_CONFIG);
 
-  const isSheetsLinked = Boolean(sheetsConfig.isLinked && sheetsConfig.masterSheetUrl.trim());
-  const canWriteToSheets = hasWriteTarget(sheetsConfig);
+  const isSheetsLinked = sheetsConfig.isLinked;
+  const canWriteToSheets = sheetsConfig.canWrite;
 
   // Save changes to LocalStorage
   useEffect(() => {
@@ -460,26 +469,49 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('indabax_event_config', JSON.stringify(eventConfig));
   }, [eventConfig]);
 
+  // La configuration du classeur, les comptes et la session ne sont plus
+  // persistes dans le navigateur : le serveur en est le seul detenteur.
+  // Au demarrage, on lui demande l'etat courant.
   useEffect(() => {
-    localStorage.setItem('indabax_sheets_config', JSON.stringify(sheetsConfig));
-  }, [sheetsConfig]);
+    let cancelled = false;
 
-  useEffect(() => {
-    localStorage.setItem('indabax_user_accounts', JSON.stringify(userAccounts));
-  }, [userAccounts]);
+    const bootstrap = async () => {
+      try {
+        const config = await api.fetchSheetsConfig();
+        if (!cancelled) setSheetsConfig(config);
+      } catch (error) {
+        console.warn('Configuration du classeur indisponible :', error);
+      }
 
-  useEffect(() => {
-    if (authSession) {
-      storeSession(authSession);
-    } else {
-      clearStoredSession();
-    }
-  }, [authSession]);
+      try {
+        const payload = await api.currentSession();
+        if (cancelled) return;
+
+        if (payload) {
+          setAuthSession(payload.session);
+          setServerCapabilities(payload.capabilities);
+          setAuthStatus('authenticated');
+        } else {
+          setAuthStatus('anonymous');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Session indisponible :', error);
+          setAuthStatus('anonymous');
+        }
+      }
+    };
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Check-In Action
   const checkInParticipant = async (
-    ticketOrId: string, 
-    sessionId: string, 
+    ticketOrId: string,
+    sessionId: string,
     scannedBy: string = "Scanner Mobile"
   ): Promise<{ success: boolean; message: string; participant?: Participant }> => {
     const cleanQuery = ticketOrId.trim().toUpperCase();
@@ -496,8 +528,8 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     } catch (e) {}
 
-    let participant = participants.find(p => 
-      p.ticketNumber.toUpperCase() === searchTicket || 
+    let participant = participants.find(p =>
+      p.ticketNumber.toUpperCase() === searchTicket ||
       p.id.toUpperCase() === searchTicket ||
       p.email.toLowerCase() === searchEmail ||
       p.name.toUpperCase() === cleanQuery
@@ -534,8 +566,8 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return { success: false, message: "Session introuvable." };
     }
 
-    const existingCheckIn = checkIns.find(c => 
-      (c.participantId === participant!.id || c.participantEmail === participant!.email) && 
+    const existingCheckIn = checkIns.find(c =>
+      (c.participantId === participant!.id || c.participantEmail === participant!.email) &&
       c.sessionId === sessionId
     );
 
@@ -590,11 +622,13 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {}
 
     if (isSheetsLinked && sheetsConfig.autoSync && canWriteToSheets) {
-      appendCheckIn(sheetsConfig, newRecord).then(success => {
-        if (success) {
-          setCheckIns(curr => curr.map(item => item.id === newRecord.id ? { ...item, syncedToSheets: true } : item));
-        }
-      });
+      // Le serveur reconstruit la ligne et y inscrit l'auteur reel du scan.
+      api
+        .appendCheckIns([newRecord])
+        .then(() => {
+          setCheckIns(curr => curr.map(item => (item.id === newRecord.id ? { ...item, syncedToSheets: true } : item)));
+        })
+        .catch(error => console.warn('Présence non écrite dans le classeur :', error.message));
     }
 
     return {
@@ -625,11 +659,12 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {}
 
     if (isSheetsLinked && sheetsConfig.autoSync && canWriteToSheets) {
-      appendFeedback(sheetsConfig, newFeedback).then(success => {
-        if (success) {
-          setFeedbacks(curr => curr.map(item => item.id === newFeedback.id ? { ...item, syncedToSheets: true } : item));
-        }
-      });
+      api
+        .appendFeedbacks([newFeedback])
+        .then(() => {
+          setFeedbacks(curr => curr.map(item => (item.id === newFeedback.id ? { ...item, syncedToSheets: true } : item)));
+        })
+        .catch(error => console.warn('Feedback non écrit dans le classeur :', error.message));
     }
 
     return true;
@@ -673,54 +708,56 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Bookmark / Save Session
   const toggleSaveSession = (sessionId: string) => {
-    setSavedSessionIds(prev => 
+    setSavedSessionIds(prev =>
       prev.includes(sessionId) ? prev.filter(id => id !== sessionId) : [...prev, sessionId]
     );
   };
 
   /* ------------------------------------------------------------------ *
-   * Authentification par email, roles attribues par l'administrateur
+   * Authentification : la decision appartient au serveur
+   *
+   * Le client n'evalue plus les roles lui-meme. Il transmet l'email, le
+   * serveur consulte le classeur, cree une session et pose un cookie
+   * HttpOnly. Les capacites affichees ici ne servent qu'a construire
+   * l'interface : chaque route sensible les revalide cote serveur.
    * ------------------------------------------------------------------ */
 
-  const authStatus: 'anonymous' | 'authenticated' = authSession ? 'authenticated' : 'anonymous';
   const realRole: ParticipantRole = authSession?.role || 'attendee';
 
   // Seul un Super-Admin peut previsualiser l'interface d'un autre role.
+  // Son role reel, lui, ne change pas : le serveur continue de l'autoriser
+  // comme Super-Admin.
   const effectiveRole: ParticipantRole =
     realRole === 'super-admin' && previewRole ? previewRole : realRole;
 
-  const capabilities = capabilitiesFor(effectiveRole);
+  const capabilities: RoleCapabilities =
+    previewRole && realRole === 'super-admin'
+      ? capabilitiesFor(previewRole)
+      : serverCapabilities || capabilitiesFor(realRole);
 
   /** Retrouve la fiche participant liee a un compte, ou la cree si absente. */
-  const resolveParticipantForAccount = (account: UserAccount): Participant => {
-    const email = normalizeEmail(account.email);
+  const resolveParticipantForSession = (session: AuthSession): Participant => {
+    const email = normalizeEmail(session.email);
     const existing = participants.find(p => normalizeEmail(p.email) === email);
 
     if (existing) {
-      // Le role venant du classeur prime sur celui stocke localement.
-      const merged: Participant = {
-        ...existing,
-        role: account.role,
-        name: account.name || existing.name,
-        institution: account.institution || existing.institution,
-        position: account.position || existing.position,
-      };
+      // Le role venant du serveur prime sur celui stocke localement.
+      const merged: Participant = { ...existing, role: session.role, name: session.name || existing.name };
       setParticipants(prev => prev.map(p => (p.id === existing.id ? merged : p)));
       return merged;
     }
 
     const created: Participant = {
       id: `usr-${Date.now().toString().slice(-6)}`,
-      ticketNumber: account.ticketNumber || `INDABAX-BJ-2026-${Math.floor(100 + Math.random() * 900)}`,
-      name: account.name,
+      ticketNumber: `INDABAX-BJ-2026-${Math.floor(100 + Math.random() * 900)}`,
+      name: session.name,
       email,
-      role: account.role,
-      institution: account.institution || 'Non renseigné',
-      position: account.position || 'Participant',
+      role: session.role,
+      institution: 'Non renseigné',
+      position: 'Participant',
       country: 'Bénin',
       city: 'Cotonou',
       avatarUrl:
-        account.avatarUrl ||
         'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=300&auto=format&fit=crop&q=80',
       bio: '',
       interests: [],
@@ -731,35 +768,39 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return created;
   };
 
+  const applyAuthPayload = (payload: api.AuthPayload) => {
+    setAuthSession(payload.session);
+    setServerCapabilities(payload.capabilities);
+    setAuthStatus('authenticated');
+    setAuthWarning(payload.warning || null);
+    setPreviewRole(null);
+
+    const profile = payload.profile;
+    const participant = resolveParticipantForSession(payload.session);
+
+    setCurrentUser(
+      profile
+        ? {
+            ...participant,
+            institution: profile.institution || participant.institution,
+            position: profile.position || participant.position,
+            ticketNumber: profile.ticketNumber || participant.ticketNumber,
+            avatarUrl: profile.avatarUrl || participant.avatarUrl,
+          }
+        : participant,
+    );
+  };
+
   const signInWithEmail = async (email: string, code?: string) => {
     setIsAuthenticating(true);
     setAuthWarning(null);
 
     try {
-      const result = await performSignIn({
-        email,
-        code,
-        config: sheetsConfig,
-        adminEmails: eventConfig.adminEmails || [],
-        localAccounts: userAccounts,
-        allowSelfSignup: Boolean(eventConfig.allowSelfSignup),
-      });
-
-      setAuthSession(result.session);
-      setAuthWarning(result.warning || null);
-      setPreviewRole(null);
-      setCurrentUser(resolveParticipantForAccount(result.account));
-
-      // Le compte resolu alimente le miroir local des comptes.
-      const cleanEmail = normalizeEmail(result.account.email);
-      setUserAccounts(prev => [
-        { ...result.account, email: cleanEmail },
-        ...prev.filter(account => normalizeEmail(account.email) !== cleanEmail),
-      ]);
+      const payload = await api.login(email, code);
+      applyAuthPayload(payload);
 
       // On ouvre le premier onglet autorise pour ce role.
-      const allowedTabs = capabilitiesFor(result.session.role).tabs;
-      setActiveTab(allowedTabs[0] || 'schedule');
+      setActiveTab(payload.capabilities.tabs[0] || 'schedule');
 
       try {
         confetti({ particleCount: 60, spread: 65, origin: { y: 0.6 }, colors: ['#10b981', '#f59e0b'] });
@@ -769,10 +810,19 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    try {
+      await api.logout();
+    } catch (error) {
+      console.warn('Déconnexion côté serveur impossible :', error);
+    }
+
     setAuthSession(null);
+    setServerCapabilities(null);
+    setAuthStatus('anonymous');
     setAuthWarning(null);
     setPreviewRole(null);
+    setUserAccounts([]);
     setActiveTab('schedule');
   };
 
@@ -780,74 +830,75 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshMyRole = async (): Promise<string> => {
     if (!authSession) return 'Aucune session ouverte.';
 
-    const result = await refreshRole(authSession, sheetsConfig);
-    if (!result) {
-      return "Rôle inchangé : le classeur n'a pas pu être relu.";
+    try {
+      const payload = await api.refreshSession();
+      applyAuthPayload(payload);
+
+      return payload.changed
+        ? `Votre rôle a été mis à jour : ${ROLE_LABELS[payload.session.role]}.`
+        : 'Votre rôle est déjà à jour.';
+    } catch (error: any) {
+      // Compte suspendu ou session expiree : le serveur nous a deconnectes.
+      if (error?.status === 401 || error?.status === 403) {
+        setAuthSession(null);
+        setServerCapabilities(null);
+        setAuthStatus('anonymous');
+        return error.message;
+      }
+      throw error;
     }
-
-    setAuthSession(result.session);
-    setPreviewRole(null);
-
-    if (result.changed) {
-      const account = userAccounts.find(a => normalizeEmail(a.email) === normalizeEmail(result.session.email));
-      setCurrentUser(
-        resolveParticipantForAccount({
-          ...(account || { email: result.session.email, name: result.session.name, status: result.session.status }),
-          email: result.session.email,
-          name: result.session.name,
-          role: result.session.role,
-          status: result.session.status,
-        }),
-      );
-      return `Votre rôle a été mis à jour : ${ROLE_LABELS[result.session.role]}.`;
-    }
-
-    return 'Votre rôle est déjà à jour.';
   };
 
   /* ------------------------------------------------------------------ *
-   * Attribution des roles par l'administrateur
+   * Comptes et attribution des roles
+   *
+   * Ces appels echouent avec un 403 si le role de la session ne porte pas
+   * la capacite requise : la verification n'est pas seulement visuelle.
    * ------------------------------------------------------------------ */
+
+  const refreshAccounts = async () => {
+    try {
+      setUserAccounts(await api.listAccounts());
+    } catch (error: any) {
+      // Un role sans droit de gestion n'a tout simplement pas de liste.
+      if (error?.status !== 403 && error?.status !== 401) {
+        console.warn('Comptes indisponibles :', error);
+      }
+      setUserAccounts([]);
+    }
+  };
+
+  // La liste des comptes n'est chargee que pour les roles qui peuvent la gerer.
+  useEffect(() => {
+    if (authStatus === 'authenticated' && capabilities.canManageRoles) {
+      refreshAccounts();
+    }
+  }, [authStatus, capabilities.canManageRoles]);
 
   const assignRole = async (
     email: string,
     role: ParticipantRole,
-    extra: Partial<UserAccount> = {},
+    extra: AssignRoleExtra = {},
   ): Promise<string> => {
     const cleanEmail = normalizeEmail(email);
     if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       throw new Error('Adresse email invalide.');
     }
 
-    const existing = userAccounts.find(account => normalizeEmail(account.email) === cleanEmail);
-
-    const account: UserAccount = {
-      email: cleanEmail,
-      name: extra.name || existing?.name || cleanEmail.split('@')[0].replace(/[._-]+/g, ' '),
-      role,
-      status: extra.status || existing?.status || 'active',
-      accessCode: extra.accessCode ?? existing?.accessCode,
-      institution: extra.institution ?? existing?.institution,
-      position: extra.position ?? existing?.position,
-      ticketNumber: extra.ticketNumber ?? existing?.ticketNumber,
-      avatarUrl: extra.avatarUrl ?? existing?.avatarUrl,
-      assignedBy: currentUser.name,
-      assignedAt: new Date().toISOString(),
-    };
+    const result = await api.assignRole({ email: cleanEmail, role, ...extra });
 
     setUserAccounts(prev => [
-      account,
-      ...prev.filter(candidate => normalizeEmail(candidate.email) !== cleanEmail),
+      result.account,
+      ...prev.filter(account => normalizeEmail(account.email) !== cleanEmail),
     ]);
 
     setParticipants(prev =>
       prev.map(p => (normalizeEmail(p.email) === cleanEmail ? { ...p, role } : p)),
     );
 
-    // Si l'admin modifie son propre role, la session suit immediatement.
+    // Si l'admin modifie son propre role, sa session suit : on la relit.
     if (authSession && normalizeEmail(authSession.email) === cleanEmail) {
-      setAuthSession({ ...authSession, role });
-      setCurrentUser(prev => ({ ...prev, role }));
+      await refreshMyRole();
     }
 
     try {
@@ -855,55 +906,57 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {}
 
     const roleLabel = ROLE_LABELS[role];
+    const sessionNote =
+      result.sessionsUpdated > 0
+        ? ` ${result.sessionsUpdated} session(s) ouverte(s) mise(s) à jour immédiatement.`
+        : '';
 
-    if (isSheetsLinked && canWriteToSheets) {
-      const written = await appendRoleAssignment(sheetsConfig, account, currentUser.name);
-      return written
-        ? `Rôle « ${roleLabel} » attribué à ${cleanEmail} et écrit dans le classeur.`
-        : `Rôle « ${roleLabel} » attribué localement — l'écriture dans le classeur a échoué.`;
-    }
-
-    if (isSheetsLinked) {
-      return `Rôle « ${roleLabel} » attribué à ${cleanEmail}. Aucune voie d'écriture configurée : reportez la ligne dans l'onglet « ${sheetsConfig.usersTab} ».`;
-    }
-
-    return `Rôle « ${roleLabel} » attribué à ${cleanEmail} dans la table locale.`;
+    return `Rôle « ${roleLabel} » attribué à ${cleanEmail}.${sessionNote}`;
   };
 
-  const updateAccount = (email: string, updated: Partial<UserAccount>) => {
+  const setAccountStatus = async (
+    email: string,
+    status: PublicUserAccount['status'],
+  ): Promise<string> => {
     const cleanEmail = normalizeEmail(email);
+    const existing = userAccounts.find(account => normalizeEmail(account.email) === cleanEmail);
+
+    if (!existing) throw new Error('Compte introuvable.');
+
+    const result = await api.assignRole({ email: cleanEmail, role: existing.role, status });
+
     setUserAccounts(prev =>
-      prev.map(account =>
-        normalizeEmail(account.email) === cleanEmail ? { ...account, ...updated } : account,
-      ),
+      prev.map(account => (normalizeEmail(account.email) === cleanEmail ? result.account : account)),
     );
+
+    return status === 'suspended'
+      ? `${cleanEmail} suspendu : ses sessions ouvertes ont été fermées.`
+      : `Statut de ${cleanEmail} mis à jour.`;
   };
 
-  const removeAccount = (email: string) => {
+  const removeAccount = async (email: string): Promise<string> => {
     const cleanEmail = normalizeEmail(email);
-    setUserAccounts(prev => prev.filter(account => normalizeEmail(account.email) !== cleanEmail));
+    const result = await api.deleteAccount(cleanEmail);
+
+    if (result.removed) {
+      setUserAccounts(prev => prev.filter(account => normalizeEmail(account.email) !== cleanEmail));
+      return `${cleanEmail} retiré de la table des comptes.`;
+    }
+
+    return `${cleanEmail} n'était pas dans la table des comptes.`;
   };
 
   const reloadAccountsFromSheet = async (): Promise<string> => {
     setIsSyncing(true);
     try {
-      const accounts = await loadUserAccounts(sheetsConfig);
-      if (accounts.length === 0) {
-        return `L'onglet « ${sheetsConfig.usersTab} » ne contient aucun email exploitable.`;
-      }
+      const result = await api.reloadAccounts();
+      await refreshAccounts();
+      setSheetsConfig(await api.fetchSheetsConfig());
 
-      setUserAccounts(accounts);
-      setSheetsConfig(prev => ({ ...prev, lastSyncTimestamp: new Date().toISOString(), lastError: undefined }));
+      const sessionNote =
+        result.sessionsUpdated > 0 ? ` ${result.sessionsUpdated} session(s) ouverte(s) réalignée(s).` : '';
 
-      // Les roles du classeur sont appliques aux fiches participants connues.
-      setParticipants(prev =>
-        prev.map(participant => {
-          const match = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(participant.email));
-          return match ? { ...participant, role: match.role } : participant;
-        }),
-      );
-
-      return `${accounts.length} compte(s) rechargé(s) depuis le classeur.`;
+      return `${result.count} compte(s) rechargé(s) depuis le classeur.${sessionNote}`;
     } finally {
       setIsSyncing(false);
     }
@@ -913,57 +966,60 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * Base de donnees Google Sheet : liaison par lien uniquement
    * ------------------------------------------------------------------ */
 
-  const updateSheetsConfig = (updated: Partial<SheetsLinkConfig>) => {
-    setSheetsConfig(prev => ({ ...prev, ...updated }));
+  const saveSheetsSettings = async (patch: SheetsSettingsPatch): Promise<string> => {
+    setIsSyncing(true);
+    try {
+      setSheetsConfig(await api.saveSheetsConfig(patch));
+      return 'Paramètres enregistrés sur le serveur.';
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  const linkSheetsDatabase = async (sheetUrl?: string): Promise<string> => {
-    const url = (sheetUrl ?? sheetsConfig.masterSheetUrl).trim();
+  const linkSheetsDatabase = async (sheetUrl: string, usersTab?: string): Promise<string> => {
+    const url = sheetUrl.trim();
     if (!url) {
       throw new Error('Renseignez le lien de partage du classeur Google Sheet.');
     }
 
     setIsSyncing(true);
-    const candidate: SheetsLinkConfig = { ...sheetsConfig, masterSheetUrl: url };
-
     try {
-      const result = await testConnection(candidate);
-
-      setSheetsConfig({
-        ...candidate,
-        isLinked: true,
-        lastSyncTimestamp: new Date().toISOString(),
-        lastError: undefined,
-      });
-
-      const accounts = await loadUserAccounts({ ...candidate, isLinked: true });
-      if (accounts.length > 0) setUserAccounts(accounts);
+      const result = await api.linkSheet(url, usersTab);
+      setSheetsConfig(result.config);
+      await refreshAccounts();
 
       try {
         confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
       } catch (e) {}
 
-      return `Classeur lié : ${result.accounts} compte(s) détecté(s) dans l'onglet « ${candidate.usersTab} ».`;
-    } catch (error: any) {
-      setSheetsConfig({ ...candidate, isLinked: false, lastError: error.message });
+      return result.message;
+    } catch (error) {
+      // Le serveur a enregistre l'echec : on relit la config pour afficher
+      // la derniere erreur constatee.
+      try {
+        setSheetsConfig(await api.fetchSheetsConfig());
+      } catch (e) {}
       throw error;
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const unlinkSheetsDatabase = () => {
-    setSheetsConfig(prev => ({ ...prev, isLinked: false, lastError: undefined }));
+  const unlinkSheetsDatabase = async (): Promise<string> => {
+    setSheetsConfig(await api.unlinkSheet());
+    return "Classeur délié : l'application repasse sur la table locale du serveur.";
   };
 
   /** Importe les participants ou les sessions depuis le classeur. */
   const importFromSheets = async (what: 'participants' | 'sessions'): Promise<string> => {
     setIsSyncing(true);
     try {
+      const data = await api.fetchSheetData(what);
+
       if (what === 'participants') {
-        const incoming = await loadParticipantsFromSheet(sheetsConfig);
+        const incoming = rowsToParticipants(data.rows);
         if (incoming.length === 0) {
-          return `L'onglet « ${sheetsConfig.participantsTab} » est vide.`;
+          return `L'onglet « ${sheetsConfig.participantsTab} » ne contient aucun participant exploitable.`;
         }
 
         let added = 0;
@@ -974,13 +1030,12 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return [...fresh, ...prev];
         });
 
-        setSheetsConfig(prev => ({ ...prev, lastSyncTimestamp: new Date().toISOString() }));
         return `${added} nouveau(x) participant(s) importé(s) sur ${incoming.length} ligne(s) lues.`;
       }
 
-      const incoming = await loadSessionsFromSheet(sheetsConfig);
+      const incoming = rowsToSessions(data.rows);
       if (incoming.length === 0) {
-        return `L'onglet « ${sheetsConfig.sessionsTab} » est vide.`;
+        return `L'onglet « ${sheetsConfig.sessionsTab} » ne contient aucune session exploitable.`;
       }
 
       let added = 0;
@@ -991,7 +1046,6 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return [...prev, ...fresh];
       });
 
-      setSheetsConfig(prev => ({ ...prev, lastSyncTimestamp: new Date().toISOString() }));
       return `${added} nouvelle(s) session(s) importée(s) sur ${incoming.length} ligne(s) lues.`;
     } finally {
       setIsSyncing(false);
@@ -1014,44 +1068,41 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const pendingCheckIns = checkIns.filter(record => !record.syncedToSheets);
       const pendingFeedbacks = feedbacks.filter(feedback => !feedback.syncedToSheets);
 
-      const syncedCheckInIds: string[] = [];
-      for (const record of pendingCheckIns) {
-        if (await appendCheckIn(sheetsConfig, record)) syncedCheckInIds.push(record.id);
-      }
-
-      const syncedFeedbackIds: string[] = [];
-      for (const feedback of pendingFeedbacks) {
-        if (await appendFeedback(sheetsConfig, feedback)) syncedFeedbackIds.push(feedback.id);
-      }
-
-      if (syncedCheckInIds.length > 0) {
-        setCheckIns(prev =>
-          prev.map(record =>
-            syncedCheckInIds.includes(record.id) ? { ...record, syncedToSheets: true } : record,
-          ),
-        );
-      }
-
-      if (syncedFeedbackIds.length > 0) {
-        setFeedbacks(prev =>
-          prev.map(feedback =>
-            syncedFeedbackIds.includes(feedback.id) ? { ...feedback, syncedToSheets: true } : feedback,
-          ),
-        );
-      }
-
-      setSheetsConfig(prev => ({ ...prev, lastSyncTimestamp: new Date().toISOString() }));
-
-      const failed =
-        pendingCheckIns.length - syncedCheckInIds.length + (pendingFeedbacks.length - syncedFeedbackIds.length);
-
       if (pendingCheckIns.length === 0 && pendingFeedbacks.length === 0) {
         return 'Tout est déjà synchronisé avec le classeur.';
       }
 
-      return `${syncedCheckInIds.length} présence(s) et ${syncedFeedbackIds.length} feedback(s) envoyés au classeur${
-        failed > 0 ? ` — ${failed} ligne(s) en échec.` : '.'
-      }`;
+      const problems: string[] = [];
+
+      if (pendingCheckIns.length > 0) {
+        try {
+          await api.appendCheckIns(pendingCheckIns);
+          const ids = new Set(pendingCheckIns.map(record => record.id));
+          setCheckIns(prev => prev.map(record => (ids.has(record.id) ? { ...record, syncedToSheets: true } : record)));
+        } catch (error: any) {
+          problems.push(`présences : ${error.message}`);
+        }
+      }
+
+      if (pendingFeedbacks.length > 0) {
+        try {
+          await api.appendFeedbacks(pendingFeedbacks);
+          const ids = new Set(pendingFeedbacks.map(feedback => feedback.id));
+          setFeedbacks(prev =>
+            prev.map(feedback => (ids.has(feedback.id) ? { ...feedback, syncedToSheets: true } : feedback)),
+          );
+        } catch (error: any) {
+          problems.push(`feedbacks : ${error.message}`);
+        }
+      }
+
+      setSheetsConfig(await api.fetchSheetsConfig());
+
+      if (problems.length > 0) {
+        throw new Error(`Envoi partiel — ${problems.join(' ; ')}`);
+      }
+
+      return `${pendingCheckIns.length} présence(s) et ${pendingFeedbacks.length} feedback(s) envoyés au classeur.`;
     } finally {
       setIsSyncing(false);
     }
@@ -1183,8 +1234,8 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return {
           ...ann,
           likes: isLiked ? ann.likes - 1 : ann.likes + 1,
-          likedBy: isLiked 
-            ? ann.likedBy.filter(id => id !== currentUser.id) 
+          likedBy: isLiked
+            ? ann.likedBy.filter(id => id !== currentUser.id)
             : [...ann.likedBy, currentUser.id]
         };
       }
@@ -1217,9 +1268,9 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Chat Actions
   const sendChannelMessage = (
-    channelId: string, 
-    content: string, 
-    attachmentUrl?: string, 
+    channelId: string,
+    content: string,
+    attachmentUrl?: string,
     attachmentType?: 'image' | 'link' | 'code'
   ) => {
     if (!content.trim() && !attachmentUrl) return;
@@ -1498,9 +1549,9 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
       } catch (e) {}
 
-      return { 
-        success: true, 
-        message: `Restauration effectuée avec succès (${jsonData.sessions?.length || 0} sessions, ${jsonData.participants?.length || 0} participants).` 
+      return {
+        success: true,
+        message: `Restauration effectuée avec succès (${jsonData.sessions?.length || 0} sessions, ${jsonData.participants?.length || 0} participants).`
       };
     } catch (err: any) {
       return { success: false, message: "Erreur lors de la restauration: " + err.message };
@@ -1521,7 +1572,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setEventConfig(INITIAL_EVENT_CONFIG);
     setSavedSessionIds(['ses-101', 'ses-201', 'ses-202']);
     setCurrentUser(INITIAL_PARTICIPANTS[0]);
-    
+
     localStorage.removeItem('indabax_sessions');
     localStorage.removeItem('indabax_participants');
     localStorage.removeItem('indabax_checkins');
@@ -1603,11 +1654,12 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       refreshMyRole,
       userAccounts,
       assignRole,
-      updateAccount,
+      setAccountStatus,
       removeAccount,
+      refreshAccounts,
       reloadAccountsFromSheet,
       sheetsConfig,
-      updateSheetsConfig,
+      saveSheetsSettings,
       isSheetsLinked,
       canWriteToSheets,
       linkSheetsDatabase,

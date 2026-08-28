@@ -104,12 +104,15 @@ export interface NetworkingConnection {
 }
 
 /**
- * Configuration de la base de donnees Google Sheet / AppSheet.
- * Aucun projet Google Cloud ni Firebase n'est requis : on ne manipule que
- * des LIENS partages (Sheet, Doc) et, en option, un point d'ecriture
- * (Apps Script Web App ou API AppSheet).
+ * Configuration de la base de donnees Google Sheet / AppSheet, telle que le
+ * serveur l'expose au client.
+ *
+ * Aucun projet Google Cloud ni Firebase n'est requis : on ne manipule que des
+ * LIENS partages. La configuration reelle, y compris les secrets d'ecriture
+ * (URL Apps Script, cle AppSheet), vit uniquement cote serveur ; le client n'en
+ * connait que l'existence, via `hasWebhook` et `hasAppSheetApi`.
  */
-export interface SheetsLinkConfig {
+export interface PublicSheetsConfig {
   /** Lien du classeur Google Sheet qui sert de base de donnees (celui d'AppSheet). */
   masterSheetUrl: string;
   /** Noms des onglets du classeur. */
@@ -118,15 +121,14 @@ export interface SheetsLinkConfig {
   sessionsTab: string;
   checkInsTab: string;
   feedbacksTab: string;
-  /** Optionnel : URL d'un Apps Script Web App (doPost) pour ecrire dans le classeur. */
-  writeWebhookUrl: string;
-  /** Optionnel : API AppSheet (App ID + Access Key) pour lire/ecrire. */
-  appSheetAppId: string;
-  appSheetAccessKey: string;
   isLinked: boolean;
+  autoSync: boolean;
   lastSyncTimestamp?: string;
   lastError?: string;
-  autoSync: boolean;
+  /** Une voie d'ecriture est configuree, sans en reveler les identifiants. */
+  canWrite: boolean;
+  hasWebhook: boolean;
+  hasAppSheetApi: boolean;
 }
 
 export type AccountStatus = 'active' | 'pending' | 'suspended';
@@ -150,6 +152,12 @@ export interface UserAccount {
   assignedAt?: string;
 }
 
+/**
+ * Compte tel que le serveur l'expose : le code d'acces n'est jamais transmis,
+ * seule son existence est signalee.
+ */
+export type PublicUserAccount = Omit<UserAccount, 'accessCode'> & { hasAccessCode: boolean };
+
 export type DocLinkKind = 'doc' | 'sheet' | 'slides' | 'form' | 'drive' | 'other';
 
 /** Lien Google Doc / Sheet / Slides expose dans l'application. */
@@ -163,14 +171,20 @@ export interface DocLink {
   visibleTo: 'all' | ParticipantRole[];
 }
 
+/**
+ * Session ouverte, telle que le serveur la decrit.
+ * L'identifiant de session n'apparait jamais ici : il reste dans un cookie
+ * HttpOnly, inaccessible au JavaScript de la page.
+ */
 export interface AuthSession {
   email: string;
   role: ParticipantRole;
   name: string;
   status: AccountStatus;
-  /** 'sheet' = role lu dans le Google Sheet, 'local' = table locale, 'bootstrap' = email admin de secours. */
+  /** 'sheet' = role lu dans le Google Sheet, 'local' = table serveur, 'bootstrap' = ADMIN_EMAILS. */
   source: 'sheet' | 'local' | 'bootstrap';
   signedInAt: string;
+  expiresAt: string;
 }
 
 export interface AIMatchmakingRecommendation {
@@ -327,11 +341,7 @@ export interface EventConfig {
   enableAnonymousFeedback: boolean;
   autoSyncGoogleSheets: boolean;
   sessionReminderMinutes: number;
-  /** Emails autorises a ouvrir l'espace Super-Admin meme si le Sheet est injoignable. */
-  adminEmails: string[];
   /** Liens Google Doc / Sheet / Slides publies dans l'application. */
   docLinks: DocLink[];
-  /** Autorise la creation d'un compte 'participant' en attente pour un email inconnu. */
-  allowSelfSignup: boolean;
 }
 

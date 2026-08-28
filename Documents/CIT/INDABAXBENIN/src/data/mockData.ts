@@ -653,8 +653,6 @@ export const INITIAL_EVENT_CONFIG: EventConfig = {
   enableAnonymousFeedback: true,
   autoSyncGoogleSheets: true,
   sessionReminderMinutes: 15,
-  adminEmails: ["mahuvivituribiok@gmail.com", "contact@indabax.bj"],
-  allowSelfSignup: false,
   docLinks: [
     {
       id: "doc-programme",

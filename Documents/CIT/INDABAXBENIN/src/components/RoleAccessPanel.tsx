@@ -40,8 +40,9 @@ export const RoleAccessPanel: React.FC = () => {
   const {
     userAccounts,
     assignRole,
-    updateAccount,
+    setAccountStatus,
     removeAccount,
+    refreshAccounts,
     reloadAccountsFromSheet,
     isSheetsLinked,
     canWriteToSheets,
@@ -130,8 +131,9 @@ export const RoleAccessPanel: React.FC = () => {
               Rôles &amp; accès
             </h2>
             <p className="text-xs text-stone-300 mt-1.5 max-w-xl leading-relaxed">
-              Chaque email reçoit un rôle, et ce rôle détermine l&apos;interface obtenue à la connexion. La source de
-              vérité est l&apos;onglet «&nbsp;{sheetsConfig.usersTab}&nbsp;» du classeur Google Sheet.
+              Chaque email reçoit un rôle, et ce rôle détermine l&apos;interface obtenue à la connexion. Le rôle est
+              vérifié par le serveur à chaque requête, jamais par le navigateur. La source de vérité est
+              l&apos;onglet «&nbsp;{sheetsConfig.usersTab}&nbsp;» du classeur Google Sheet.
             </p>
           </div>
 
@@ -143,8 +145,14 @@ export const RoleAccessPanel: React.FC = () => {
 
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => run(reloadAccountsFromSheet)}
-                disabled={isSyncing || isWorking || !isSheetsLinked}
+                onClick={() =>
+                  run(async () => {
+                    if (isSheetsLinked) return reloadAccountsFromSheet();
+                    await refreshAccounts();
+                    return 'Liste des comptes rechargée depuis le serveur.';
+                  })
+                }
+                disabled={isSyncing || isWorking}
                 className="px-3 py-1.5 bg-white/15 hover:bg-white/25 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -194,8 +202,8 @@ export const RoleAccessPanel: React.FC = () => {
         <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-2xl text-[11px] font-semibold flex items-start gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
           <span>
-            Aucune voie d&apos;écriture configurée : les attributions restent locales. Ajoutez une URL Apps Script ou
-            les identifiants AppSheet pour qu&apos;elles remontent dans le classeur.
+            Aucune voie d&apos;écriture configurée : les attributions restent dans la table du serveur. Ajoutez une URL
+            Apps Script ou les identifiants AppSheet pour qu&apos;elles remontent aussi dans le classeur.
           </span>
         </div>
       )}
@@ -316,7 +324,7 @@ export const RoleAccessPanel: React.FC = () => {
                         Moi
                       </span>
                     )}
-                    {account.accessCode && (
+                    {account.hasAccessCode && (
                       <span title="Protégé par un code d'accès" className="inline-flex">
                         <KeyRound className="w-3 h-3 text-amber-600" />
                       </span>
@@ -349,9 +357,8 @@ export const RoleAccessPanel: React.FC = () => {
 
                 <select
                   value={account.status}
-                  onChange={event =>
-                    updateAccount(account.email, { status: event.target.value as AccountStatus })
-                  }
+                  onChange={event => run(() => setAccountStatus(account.email, event.target.value as AccountStatus))}
+                  disabled={isWorking}
                   className="px-2.5 py-1.5 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-[11px] font-bold outline-none focus:border-emerald-600 transition cursor-pointer shrink-0"
                 >
                   {(Object.keys(STATUS_LABELS) as AccountStatus[]).map(status => (
@@ -364,11 +371,10 @@ export const RoleAccessPanel: React.FC = () => {
                 <button
                   onClick={() => {
                     if (confirm(`Retirer ${account.email} de la table des comptes ?`)) {
-                      removeAccount(account.email);
-                      setFeedback({ kind: 'ok', text: `${account.email} retiré de la table locale.` });
+                      run(() => removeAccount(account.email));
                     }
                   }}
-                  disabled={isMe}
+                  disabled={isMe || isWorking}
                   className="p-2 text-stone-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl transition cursor-pointer shrink-0"
                   title={isMe ? 'Vous ne pouvez pas retirer votre propre compte' : 'Retirer'}
                 >
