@@ -10,6 +10,7 @@ import {
   parseStatus,
   toTable,
 } from './sheets';
+import { SHEET_TEMPLATES, templateToCsv } from '../data/sheetTemplates';
 
 let passed = 0;
 let failed = 0;
@@ -101,7 +102,7 @@ check('vide -> actif', parseStatus(''), 'active');
 
 console.log('\n--- mapUserAccounts (en-tetes FR realistes) ---');
 const csv = [
-  'Nom complet,Adresse Email,Rôle,Statut,Code d\'accès,Organisation',
+  'Nom complet,Adresse Email,Rôle,Statut,Mot de passe,Organisation',
   'Turibio KEKE,MahuviviTuribioK@Gmail.com ,Admin,Actif,SECRET1,Sèmè City',
   'Amina Biotchané,amina.biotchane@uac.bj,Conférencière,Actif,,UAC',
   'Bob Volontaire,bob@indabax.bj,Bénévole,En attente,,',
@@ -114,10 +115,10 @@ const accounts = mapUserAccounts(toTable(parseCsv(csv)));
 check('nombre de comptes (doublon + ligne sans email ecartes)', accounts.length, 3);
 check('email normalise en minuscules et trim', accounts[0].email, 'mahuvivituribiok@gmail.com');
 check('role admin', accounts[0].role, 'super-admin');
-check('code d acces lu', accounts[0].accessCode, 'SECRET1');
+check('mot de passe lu', accounts[0].password, 'SECRET1');
 check('institution lue', accounts[0].institution, 'Sèmè City');
 check('conferenciere -> speaker', accounts[1].role, 'speaker');
-check('pas de code -> undefined', accounts[1].accessCode, undefined);
+check('pas de mot de passe -> undefined', accounts[1].password, undefined);
 check('benevole -> volunteer', accounts[2].role, 'volunteer');
 check('statut en attente', accounts[2].status, 'pending');
 check('premier doublon conserve', accounts[1].name, 'Amina Biotchané');
@@ -133,5 +134,51 @@ const csvNoName = ['Email,Role', 'pierre.dupont@x.org,Participant'].join('\n');
 const derived = mapUserAccounts(toTable(parseCsv(csvNoName)));
 check('nom deduit', derived[0].name, 'pierre dupont');
 
+/* ------------------------------------------------------------------ *
+ * Les modeles documentes doivent etre relisibles par l'application :
+ * ce que l'on montre aux organisateurs et ce que le code sait lire ne
+ * peuvent pas divulguer.
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- Aller-retour des modeles de feuilles ---');
+
+for (const template of SHEET_TEMPLATES) {
+  const table = toTable(parseCsv(templateToCsv(template)));
+
+  check(
+    `${template.tab} : en-tetes preserves`,
+    table.headers,
+    template.headers.map(normalizeHeader),
+  );
+  check(`${template.tab} : ${template.rows.length} ligne(s) relues`, table.rows.length, template.rows.length);
+
+  for (const required of template.requiredColumns) {
+    const key = normalizeHeader(required);
+    const renseignees = table.rows.filter(row => row[key]).length;
+    check(`${template.tab} : colonne ${required} renseignee partout`, renseignees, template.rows.length);
+  }
+}
+
+console.log('\n--- Le modele Utilisateurs produit des comptes exploitables ---');
+
+const usersTemplate = SHEET_TEMPLATES.find(t => t.tab === 'Utilisateurs')!;
+const templateAccounts = mapUserAccounts(toTable(parseCsv(templateToCsv(usersTemplate))));
+
+check('tous les comptes du modele sont reconnus', templateAccounts.length, usersTemplate.rows.length);
+check(
+  'chaque compte a un mot de passe',
+  templateAccounts.filter(account => account.password).length,
+  usersTemplate.rows.length,
+);
+check(
+  'les six roles du modele sont couverts',
+  Array.from(new Set(templateAccounts.map(account => account.role))).sort(),
+  ['attendee', 'organizer', 'speaker', 'sponsor', 'super-admin', 'volunteer'],
+);
+check(
+  'le statut en attente est reconnu',
+  templateAccounts.filter(account => account.status === 'pending').length,
+  1,
+);
 console.log(`\n=== ${passed} reussis, ${failed} echoues ===`);
 if (failed > 0) process.exit(1);

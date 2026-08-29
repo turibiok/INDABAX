@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { AccountStatus, ParticipantRole, UserAccount } from '../src/types';
+import { AccountStatus, ParticipantRole, PublicUserAccount, UserAccount } from '../src/types';
 import { normalizeEmail, parseRole, parseStatus } from '../src/lib/sheets';
-import { INITIAL_USER_ACCOUNTS } from '../src/data/mockData';
+import { DEMO_PASSWORD, INITIAL_USER_ACCOUNTS } from '../src/data/mockData';
+import { hashPassword } from './passwords';
 
 /**
  * Etat persistant du serveur : configuration de la base Google Sheet et
@@ -92,18 +93,17 @@ function writeStateToDisk() {
   }
 }
 
-export function initStore() {
+export async function initStore() {
   state = readStateFromDisk();
 
   // Amorcage de demonstration : uniquement hors production, et uniquement si
   // aucun compte n'existe encore. Un deploiement reel part donc d'une table
   // vide, et le premier acces passe par ADMIN_EMAILS.
   if (state.accounts.length === 0 && process.env.NODE_ENV !== 'production') {
-    state.accounts = INITIAL_USER_ACCOUNTS;
-    writeStateToDisk();
+    await replaceAccounts(INITIAL_USER_ACCOUNTS);
     console.log(
-      `Mode développement : ${state.accounts.length} compte(s) de démonstration amorcé(s). ` +
-        "Aucun amorçage n'a lieu en production.",
+      `Mode développement : ${state.accounts.length} compte(s) de démonstration amorcé(s), ` +
+        `mot de passe « ${DEMO_PASSWORD} ». Aucun amorçage n'a lieu en production.`,
     );
   }
 
@@ -183,10 +183,10 @@ export function getAccounts(): UserAccount[] {
   return state.accounts.map(account => ({ ...account }));
 }
 
-/** Vue publique d'un compte : sans le code d'acces. */
-export function toPublicAccount(account: UserAccount): Omit<UserAccount, 'accessCode'> & { hasAccessCode: boolean } {
-  const { accessCode, ...rest } = account;
-  return { ...rest, hasAccessCode: Boolean(accessCode) };
+/** Vue publique d'un compte : sans le mot de passe ni son empreinte. */
+export function toPublicAccount(account: UserAccount): PublicUserAccount {
+  const { password, passwordHash, ...rest } = account;
+  return { ...rest, hasPassword: Boolean(passwordHash) };
 }
 
 export function findAccount(email: string): UserAccount | undefined {
@@ -199,7 +199,8 @@ export function upsertAccount(input: {
   name?: string;
   role: ParticipantRole;
   status?: AccountStatus;
-  accessCode?: string;
+  /** Empreinte deja calculee. Laisser vide conserve celle du compte existant. */
+  passwordHash?: string;
   institution?: string;
   position?: string;
   ticketNumber?: string;
@@ -214,7 +215,8 @@ export function upsertAccount(input: {
     name: input.name || existing?.name || email.split('@')[0].replace(/[._-]+/g, ' '),
     role: input.role,
     status: input.status || existing?.status || 'active',
-    accessCode: input.accessCode !== undefined ? input.accessCode || undefined : existing?.accessCode,
+    // Aucun mot de passe en clair n'est jamais conserve.
+    passwordHash: input.passwordHash || existing?.passwordHash,
     institution: input.institution ?? existing?.institution,
     position: input.position ?? existing?.position,
     ticketNumber: input.ticketNumber ?? existing?.ticketNumber,
@@ -226,6 +228,18 @@ export function upsertAccount(input: {
   state.accounts = [account, ...state.accounts.filter(item => normalizeEmail(item.email) !== email)];
   writeStateToDisk();
   return account;
+}
+
+/** Remplace l'empreinte du mot de passe d'un compte existant. */
+export function setPasswordHash(email: string, passwordHash: string): boolean {
+  const clean = normalizeEmail(email);
+  const account = state.accounts.find(item => normalizeEmail(item.email) === clean);
+  if (!account) return false;
+
+  account.passwordHash = passwordHash;
+  delete account.password;
+  writeStateToDisk();
+  return true;
 }
 
 export function removeAccount(email: string): boolean {
@@ -240,11 +254,52 @@ export function removeAccount(email: string): boolean {
   return false;
 }
 
-/** Remplace la table locale par les comptes lus dans le classeur. */
-export function replaceAccounts(accounts: UserAccount[]): number {
-  state.accounts = accounts;
+/**
+ * Remplace la table locale par les comptes lus dans le classeur.
+ *
+ * Les mots de passe presents dans le classeur sont haches ici, puis oublies :
+ * le fichier d'etat ne contient que des empreintes. Une ligne sans mot de passe
+ * conserve l'empreinte deja enregistree, ce qui permet a un participant d'avoir
+ * change le sien sans que l'admin ne l'ecrase a chaque rechargement.
+ */
+export async function replaceAccounts(incoming: UserAccount[]): Promise<number> {
+  const merged: UserAccount[] = [];
+
+  for (const account of incoming) {
+    const email = normalizeEmail(account.email);
+    const existing = findAccount(email);
+    const { password, ...rest } = account;
+
+    merged.push({
+      ...rest,
+      email,
+      passwordHash: password ? await hashPassword(password) : existing?.passwordHash,
+    });
+  }
+
+  state.accounts = merged;
   writeStateToDisk();
-  return accounts.length;
+  return merged.length;
+}
+
+/**
+ * Prepare un compte lu dans le classeur pour la verification du mot de passe :
+ * renvoie l'empreinte a utiliser, en hachant au besoin le mot de passe du
+ * classeur et en l'enregistrant pour les connexions suivantes.
+ */
+export async function resolvePasswordHash(account: UserAccount): Promise<string | undefined> {
+  const email = normalizeEmail(account.email);
+  const existing = findAccount(email);
+
+  // Un mot de passe fraichement saisi dans le classeur prime : c'est ainsi que
+  // l'organisateur reinitialise l'acces de quelqu'un.
+  if (account.password) {
+    const hash = await hashPassword(account.password);
+    if (existing) setPasswordHash(email, hash);
+    return hash;
+  }
+
+  return existing?.passwordHash;
 }
 
 /* ------------------------------------------------------------------ *

@@ -690,15 +690,25 @@ export const INITIAL_EVENT_CONFIG: EventConfig = {
 };
 
 /**
- * Table des comptes utilisee hors ligne (miroir de l'onglet `Utilisateurs`
- * du classeur Google Sheet). Le Super-Admin peut la modifier dans l'application,
- * mais le classeur reste la source de verite quand il est lie.
+ * Mot de passe des comptes de demonstration.
+ *
+ * Ces comptes ne sont amorces qu'en developpement (voir `initStore`), jamais
+ * en production : ce mot de passe partage n'ouvre donc aucun deploiement reel.
+ */
+export const DEMO_PASSWORD = "indabax2026";
+
+/**
+ * Table des comptes de demonstration, amorcee cote serveur au premier
+ * demarrage en developpement. Une fois un classeur Google Sheet lie, c'est
+ * l'onglet `Utilisateurs` qui devient la source de verite.
  */
 export const INITIAL_USER_ACCOUNTS: UserAccount[] = INITIAL_PARTICIPANTS.map(participant => ({
   email: participant.email,
   name: participant.name,
   role: participant.role,
   status: "active" as const,
+  // Mot de passe en clair : il est hache par le serveur des l'amorcage.
+  password: DEMO_PASSWORD,
   institution: participant.institution,
   position: participant.position,
   ticketNumber: participant.ticketNumber,

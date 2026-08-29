@@ -9,9 +9,18 @@ import {
   isBootstrapAdmin,
   removeAccount,
   replaceAccounts,
+  resolvePasswordHash,
+  setPasswordHash,
   toPublicAccount,
   upsertAccount,
 } from '../store';
+import {
+  generatePassword,
+  hashPassword,
+  MIN_PASSWORD_LENGTH,
+  validatePassword,
+  verifyPassword,
+} from '../passwords';
 import {
   AuthedRequest,
   clearSessionCookie,
@@ -29,6 +38,9 @@ import {
 import { readTab, SheetError } from '../sheetsGateway';
 
 export const authRouter = Router();
+
+/** Longueur minimale exigee, exposee pour les messages d'interface. */
+export const PASSWORD_MIN_LENGTH = MIN_PASSWORD_LENGTH;
 
 /* ------------------------------------------------------------------ *
  * Limitation des tentatives de connexion
@@ -78,6 +90,8 @@ interface Resolution {
   account: UserAccount;
   source: 'sheet' | 'local' | 'bootstrap';
   warning?: string;
+  /** Empreinte a utiliser pour verifier le mot de passe saisi. */
+  passwordHash?: string;
 }
 
 /**
@@ -94,7 +108,9 @@ async function resolveAccount(email: string): Promise<Resolution> {
     try {
       const table = await readTab(config.usersTab, config);
       const account = mapUserAccounts(table).find(item => item.email === email);
-      if (account) return { account, source: 'sheet' };
+      if (account) {
+        return { account, source: 'sheet', passwordHash: await resolvePasswordHash(account) };
+      }
     } catch (error: any) {
       // Classeur momentanement illisible : on n'enferme pas les organisateurs
       // dehors, on retombe sur la table locale du serveur en le signalant.
@@ -105,10 +121,14 @@ async function resolveAccount(email: string): Promise<Resolution> {
 
   const local = findAccount(email);
   if (local) {
-    return { account: local, source: 'local', warning };
+    return { account: local, source: 'local', warning, passwordHash: local.passwordHash };
   }
 
   if (isBootstrapAdmin(email)) {
+    // Le mot de passe d'amorcage vient de la variable ADMIN_PASSWORD : il n'est
+    // ni dans le classeur ni dans le fichier d'etat.
+    const bootstrapPassword = process.env.ADMIN_PASSWORD || '';
+
     return {
       account: {
         email,
@@ -117,6 +137,7 @@ async function resolveAccount(email: string): Promise<Resolution> {
         status: 'active',
       },
       source: 'bootstrap',
+      passwordHash: bootstrapPassword ? await hashPassword(bootstrapPassword) : undefined,
       warning: warning || "Connexion via la liste ADMIN_EMAILS du serveur : liez un classeur pour gérer les rôles.",
     };
   }
@@ -134,7 +155,7 @@ async function resolveAccount(email: string): Promise<Resolution> {
 
 authRouter.post('/login', async (req, res) => {
   const email = normalizeEmail(typeof req.body?.email === 'string' ? req.body.email : '');
-  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
   const ip = req.ip || 'inconnu';
   const key = attemptKey(ip, email);
 
@@ -150,23 +171,32 @@ authRouter.post('/login', async (req, res) => {
       });
     }
 
-    const { account, source, warning } = await resolveAccount(email);
+    if (!password) {
+      return res.status(400).json({ error: 'Le mot de passe est requis.', reason: 'password_required' });
+    }
+
+    const { account, source, warning, passwordHash } = await resolveAccount(email);
 
     if (account.status === 'suspended') {
       recordFailure(key);
       return res.status(403).json({ error: "Ce compte a été suspendu par l'administrateur.", reason: 'suspended' });
     }
 
-    // Le code d'acces n'est exige que si la colonne est remplie pour ce compte.
-    if (account.accessCode) {
-      if (!code) {
-        return res.status(401).json({ error: "Un code d'accès est requis pour ce compte.", reason: 'code_required' });
-      }
+    // Aucun mot de passe n'est defini pour ce compte : personne ne doit pouvoir
+    // entrer, sinon un email connu suffirait.
+    if (!passwordHash) {
+      return res.status(409).json({
+        error:
+          source === 'bootstrap'
+            ? "Aucun mot de passe d'amorçage : renseignez ADMIN_PASSWORD dans le fichier .env du serveur."
+            : "Aucun mot de passe n'est défini pour ce compte. Demandez à un organisateur de vous en attribuer un.",
+        reason: 'no_password',
+      });
+    }
 
-      if (code.toLowerCase() !== account.accessCode.trim().toLowerCase()) {
-        recordFailure(key);
-        return res.status(401).json({ error: "Code d'accès incorrect.", reason: 'bad_code' });
-      }
+    if (!(await verifyPassword(password, passwordHash))) {
+      recordFailure(key);
+      return res.status(401).json({ error: 'Mot de passe incorrect.', reason: 'bad_password' });
     }
 
     clearAttempts(key);
@@ -179,7 +209,7 @@ authRouter.post('/login', async (req, res) => {
         name: account.name,
         role: account.role,
         status: account.status,
-        accessCode: account.accessCode,
+        passwordHash,
         institution: account.institution,
         position: account.position,
         ticketNumber: account.ticketNumber,
@@ -290,6 +320,49 @@ authRouter.post('/refresh', requireAuth, async (req: AuthedRequest, res) => {
 });
 
 /* ------------------------------------------------------------------ *
+ * POST /api/auth/password — changement de son propre mot de passe
+ * ------------------------------------------------------------------ */
+
+authRouter.post('/password', requireAuth, async (req: AuthedRequest, res) => {
+  const session = req.session!;
+  const current = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+  const next = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+
+  const invalid = validatePassword(next);
+  if (invalid) {
+    return res.status(400).json({ error: invalid, reason: 'weak_password' });
+  }
+
+  const account = findAccount(session.email);
+  if (!account) {
+    return res.status(404).json({
+      error: "Votre compte n'est pas enregistré sur ce serveur : le mot de passe ne peut pas y être changé.",
+      reason: 'not_found',
+    });
+  }
+
+  // Le mot de passe actuel est exige : un cookie vole ne doit pas suffire a
+  // verrouiller definitivement le compte de quelqu'un d'autre.
+  if (!account.passwordHash || !(await verifyPassword(current, account.passwordHash))) {
+    return res.status(401).json({ error: 'Mot de passe actuel incorrect.', reason: 'bad_password' });
+  }
+
+  if (await verifyPassword(next, account.passwordHash)) {
+    return res.status(400).json({
+      error: "Le nouveau mot de passe est identique à l'actuel.",
+      reason: 'unchanged',
+    });
+  }
+
+  setPasswordHash(session.email, await hashPassword(next));
+
+  res.json({
+    ok: true,
+    message: 'Mot de passe modifié. Il remplace celui du classeur pour vos prochaines connexions.',
+  });
+});
+
+/* ------------------------------------------------------------------ *
  * Gestion des comptes — reservee a canManageRoles
  * ------------------------------------------------------------------ */
 
@@ -311,12 +384,28 @@ authRouter.post('/accounts', requireCapability('canManageRoles'), async (req: Au
     return res.status(400).json({ error: 'Rôle inconnu.' });
   }
 
+  // Mot de passe : fourni par l'admin, ou genere si demande. Il n'est renvoye
+  // en clair qu'une seule fois, pour que l'admin puisse le transmettre.
+  const wantsGenerated = req.body?.generatePassword === true;
+  const providedPassword = typeof req.body?.password === 'string' ? req.body.password : '';
+
+  let plainPassword: string | undefined;
+  if (wantsGenerated) {
+    plainPassword = generatePassword();
+  } else if (providedPassword) {
+    const invalid = validatePassword(providedPassword);
+    if (invalid) {
+      return res.status(400).json({ error: invalid, reason: 'weak_password' });
+    }
+    plainPassword = providedPassword;
+  }
+
   const account = upsertAccount({
     email,
     role,
     status,
     name: typeof req.body?.name === 'string' ? req.body.name : undefined,
-    accessCode: typeof req.body?.accessCode === 'string' ? req.body.accessCode : undefined,
+    passwordHash: plainPassword ? await hashPassword(plainPassword) : undefined,
     institution: typeof req.body?.institution === 'string' ? req.body.institution : undefined,
     position: typeof req.body?.position === 'string' ? req.body.position : undefined,
     assignedBy: req.session!.name,
@@ -325,9 +414,18 @@ authRouter.post('/accounts', requireCapability('canManageRoles'), async (req: Au
   // Les sessions ouvertes de cet email suivent immediatement le nouveau role.
   const touched = updateSessionsForEmail(email, { role: account.role, status: account.status });
 
+  // Un mot de passe remplace ferme les sessions ouvertes du compte concerne,
+  // sauf s'il s'agit de l'admin lui-meme.
+  if (plainPassword && email !== req.session!.email) {
+    revokeSessionsForEmail(email);
+  }
+
   res.json({
     account: toPublicAccount(account),
     sessionsUpdated: touched,
+    // Transmis une seule fois : le serveur n'en garde que l'empreinte.
+    generatedPassword: wantsGenerated ? plainPassword : undefined,
+    passwordChanged: Boolean(plainPassword),
   });
 });
 
@@ -361,7 +459,7 @@ authRouter.post('/accounts/reload', requireCapability('canManageRoles'), async (
       });
     }
 
-    replaceAccounts(accounts);
+    await replaceAccounts(accounts);
 
     // Les roles fraichement lus s'appliquent aux sessions deja ouvertes.
     let sessionsUpdated = 0;

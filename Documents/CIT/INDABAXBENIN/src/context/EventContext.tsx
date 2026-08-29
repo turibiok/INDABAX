@@ -60,8 +60,10 @@ interface EventContextType {
   authSession: AuthSession | null;
   authWarning: string | null;
   isAuthenticating: boolean;
-  signInWithEmail: (email: string, code?: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Changement de son propre mot de passe : l'actuel est exigé. */
+  changeMyPassword: (currentPassword: string, newPassword: string) => Promise<string>;
   /** Role reellement attribue au compte connecte. */
   realRole: ParticipantRole;
   /** Role effectivement applique a l'interface (previsualisation Super-Admin incluse). */
@@ -192,7 +194,10 @@ interface EventContextType {
 export interface AssignRoleExtra {
   name?: string;
   status?: PublicUserAccount['status'];
-  accessCode?: string;
+  /** Mot de passe choisi par l'administrateur. */
+  password?: string;
+  /** Demande au serveur d'en générer un, renvoyé une seule fois. */
+  generatePassword?: boolean;
   institution?: string;
   position?: string;
 }
@@ -791,12 +796,12 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
-  const signInWithEmail = async (email: string, code?: string) => {
+  const signInWithEmail = async (email: string, password: string) => {
     setIsAuthenticating(true);
     setAuthWarning(null);
 
     try {
-      const payload = await api.login(email, code);
+      const payload = await api.login(email, password);
       applyAuthPayload(payload);
 
       // On ouvre le premier onglet autorise pour ce role.
@@ -824,6 +829,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setPreviewRole(null);
     setUserAccounts([]);
     setActiveTab('schedule');
+  };
+
+  const changeMyPassword = async (currentPassword: string, newPassword: string): Promise<string> => {
+    const result = await api.changePassword(currentPassword, newPassword);
+    return result.message;
   };
 
   /** Relit le role depuis le classeur : utile si l'admin vient de le changer. */
@@ -911,7 +921,15 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ? ` ${result.sessionsUpdated} session(s) ouverte(s) mise(s) à jour immédiatement.`
         : '';
 
-    return `Rôle « ${roleLabel} » attribué à ${cleanEmail}.${sessionNote}`;
+    // Le mot de passe généré ne transite qu'une fois : il est affiché à
+    // l'administrateur pour qu'il le transmette, puis oublié.
+    const passwordNote = result.generatedPassword
+      ? ` Mot de passe à transmettre : ${result.generatedPassword}`
+      : result.passwordChanged
+        ? ' Mot de passe enregistré.'
+        : '';
+
+    return `Rôle « ${roleLabel} » attribué à ${cleanEmail}.${sessionNote}${passwordNote}`;
   };
 
   const setAccountStatus = async (
@@ -1646,6 +1664,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       isAuthenticating,
       signInWithEmail,
       signOut,
+      changeMyPassword,
       realRole,
       effectiveRole,
       capabilities,

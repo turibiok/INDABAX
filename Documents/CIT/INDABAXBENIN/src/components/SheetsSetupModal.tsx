@@ -14,16 +14,23 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Table2,
   Trash2,
   Unlink,
   Upload,
   X,
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
-import { APPS_SCRIPT_SNIPPET, SHEET_TEMPLATE_HEADERS } from '../services/sheetsDb';
+import { APPS_SCRIPT_SNIPPET } from '../services/sheetsDb';
+import {
+  SHEET_TEMPLATES,
+  SheetTemplate,
+  downloadAllTemplates,
+  downloadTemplateCsv,
+} from '../data/sheetTemplates';
 import { DocLink, DocLinkKind } from '../types';
 
-type Panel = 'database' | 'write' | 'documents';
+type Panel = 'database' | 'write' | 'documents' | 'templates';
 
 interface SheetsSetupModalProps {
   isOpen: boolean;
@@ -208,6 +215,7 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
         {/* Onglets */}
         <div className="px-6 pt-4 pb-2 flex items-center gap-1.5 border-b border-stone-200 dark:border-stone-800 shrink-0 overflow-x-auto">
           {tabButton('database', 'Classeur & rôles', Database)}
+          {tabButton('templates', 'Modèles des feuilles', Table2)}
           {tabButton('write', 'Écriture', Upload)}
           {tabButton('documents', 'Documents', FileText)}
         </div>
@@ -408,25 +416,44 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                 </>
               )}
 
-              {/* Colonnes attendues */}
-              <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 space-y-2">
+              {/* Renvoi vers les modeles */}
+              <button
+                onClick={() => setPanel('templates')}
+                className="w-full p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 text-left hover:border-emerald-500 transition cursor-pointer"
+              >
                 <p className="text-[11px] font-bold text-stone-700 dark:text-stone-300 flex items-center gap-1.5">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                  Colonnes attendues par onglet
+                  Voir les modèles des cinq feuilles et les télécharger
                 </p>
-                {Object.entries(SHEET_TEMPLATE_HEADERS).map(([tab, headers]) => (
-                  <div key={tab} className="text-[10px] leading-relaxed">
-                    <span className="font-mono font-bold text-emerald-800 dark:text-emerald-400">{tab}</span>
-                    <span className="text-stone-600 dark:text-stone-400"> : {headers.join(' · ')}</span>
-                  </div>
-                ))}
-                <p className="text-[10px] text-stone-500 pt-1 border-t border-stone-200 dark:border-stone-700">
-                  Les intitulés sont tolérants aux accents et aux variantes (Email / Adresse email, Rôle / Fonction…).
-                  Seule la colonne <strong>Email</strong> est indispensable dans l&apos;onglet des comptes. Si son nom
-                  est mal orthographié, Google renvoie le premier onglet du classeur : la liaison échouera en
-                  signalant les colonnes réellement lues.
+                <p className="text-[10px] text-stone-500 mt-1 leading-relaxed">
+                  Colonnes attendues, libellés acceptés et exemples de lignes pour Utilisateurs, Participants,
+                  Sessions, Check-ins et Feedbacks.
                 </p>
+              </button>
+            </div>
+          )}
+
+          {/* ---------------- Panneau : modeles des feuilles ---------------- */}
+          {panel === 'templates' && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <p className="text-[11px] text-stone-600 dark:text-stone-400 leading-relaxed max-w-md">
+                  Créez un onglet par feuille dans votre classeur, avec la ligne d&apos;en-têtes indiquée. Les lignes
+                  d&apos;exemple sont là pour montrer le format attendu : remplacez-les par vos données réelles.
+                </p>
+
+                <button
+                  onClick={() => downloadAllTemplates()}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-[11px] font-bold flex items-center gap-1.5 shrink-0 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Télécharger les 5 CSV
+                </button>
               </div>
+
+              {SHEET_TEMPLATES.map(template => (
+                <TemplateCard key={template.tab} template={template} />
+              ))}
             </div>
           )}
 
@@ -630,6 +657,131 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
             Fermer
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const DIRECTION_LABELS: Record<SheetTemplate['direction'], { text: string; className: string }> = {
+  lecture: {
+    text: "Lue par l'application",
+    className: 'bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300',
+  },
+  'écriture': {
+    text: "Remplie par l'application",
+    className: 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300',
+  },
+  'lecture-écriture': {
+    text: 'Lue et remplie',
+    className: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300',
+  },
+};
+
+/** Présentation d'un onglet : rôle, colonnes, exemples et libellés acceptés. */
+const TemplateCard: React.FC<{ template: SheetTemplate }> = ({ template }) => {
+  const [expanded, setExpanded] = useState(false);
+  const direction = DIRECTION_LABELS[template.direction];
+
+  return (
+    <div className="rounded-2xl border border-stone-200 dark:border-stone-700 overflow-hidden">
+      <div className="p-3.5 bg-stone-50 dark:bg-stone-800/60 space-y-2">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono font-bold text-sm text-emerald-800 dark:text-emerald-400">
+                {template.tab}
+              </span>
+              <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${direction.className}`}>
+                {direction.text}
+              </span>
+            </div>
+            <p className="text-[11px] text-stone-600 dark:text-stone-400 mt-1 leading-relaxed">
+              {template.purpose}
+            </p>
+          </div>
+
+          <button
+            onClick={() => downloadTemplateCsv(template)}
+            className="px-3 py-1.5 bg-white dark:bg-stone-900 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-[10px] font-bold text-stone-800 dark:text-stone-200 flex items-center gap-1.5 shrink-0 transition cursor-pointer"
+          >
+            <Download className="w-3 h-3" />
+            CSV
+          </button>
+        </div>
+
+        {template.requiredColumns.length > 0 && (
+          <p className="text-[10px] text-stone-600 dark:text-stone-400">
+            Colonne indispensable :{' '}
+            <strong className="font-mono">{template.requiredColumns.join(', ')}</strong>
+          </p>
+        )}
+      </div>
+
+      {/* Aperçu du tableau : défile horizontalement sans pousser la modale */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-[10px] border-collapse">
+          <thead>
+            <tr className="bg-stone-100 dark:bg-stone-800">
+              {template.headers.map(header => (
+                <th
+                  key={header}
+                  className="px-2 py-1.5 text-left font-mono font-bold text-stone-700 dark:text-stone-300 whitespace-nowrap border-b border-stone-200 dark:border-stone-700"
+                >
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(expanded ? template.rows : template.rows.slice(0, 2)).map((row, rowIndex) => (
+              <tr key={rowIndex} className="odd:bg-white even:bg-stone-50 dark:odd:bg-stone-900 dark:even:bg-stone-800/40">
+                {row.map((cell, cellIndex) => (
+                  <td
+                    key={cellIndex}
+                    className="px-2 py-1.5 text-stone-700 dark:text-stone-300 align-top max-w-[220px] border-b border-stone-100 dark:border-stone-800"
+                  >
+                    {cell || <span className="text-stone-400">—</span>}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-3 space-y-2 bg-white dark:bg-stone-900">
+        {template.rows.length > 2 && (
+          <button
+            onClick={() => setExpanded(state => !state)}
+            className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
+          >
+            {expanded ? 'Réduire les exemples' : `Voir les ${template.rows.length} lignes d'exemple`}
+          </button>
+        )}
+
+        {Object.keys(template.aliases).length > 0 && (
+          <details className="text-[10px]">
+            <summary className="font-bold text-stone-700 dark:text-stone-300 cursor-pointer">
+              Libellés de colonnes également acceptés
+            </summary>
+            <ul className="mt-1.5 space-y-0.5 pl-1">
+              {Object.entries(template.aliases).map(([column, values]) => (
+                <li key={column} className="text-stone-600 dark:text-stone-400 leading-relaxed">
+                  <span className="font-mono font-bold">{column}</span> : {values.join(' · ')}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        <ul className="space-y-1">
+          {template.notes.map((note, index) => (
+            <li key={index} className="text-[10px] text-stone-500 dark:text-stone-500 leading-relaxed flex gap-1.5">
+              <span className="text-emerald-600 shrink-0">•</span>
+              <span>{note}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

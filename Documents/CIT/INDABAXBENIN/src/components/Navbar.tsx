@@ -23,10 +23,12 @@ import {
   Upload,
   Database,
   LogOut,
-  RotateCcw
+  RotateCcw,
+  Lock
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
 import { AppTab, ROLE_LABELS } from '../permissions';
+import { PasswordChangeModal } from './PasswordChangeModal';
 
 export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner }) => {
   const {
@@ -57,6 +59,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
 
   const [roleActionMessage, setRoleActionMessage] = useState<string | null>(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   const getRoleDashboardIcon = () => {
     switch (effectiveRole) {
@@ -376,6 +379,17 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
 
                     <button
                       onClick={() => {
+                        setIsPasswordModalOpen(true);
+                        setIsRoleDropdownOpen(false);
+                      }}
+                      className="w-full py-1.5 px-3 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 text-xs font-semibold rounded-lg text-left flex items-center gap-2 cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Changer mon mot de passe</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
                         setActiveTab('badge');
                         setIsRoleDropdownOpen(false);
                       }}
@@ -498,6 +512,8 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
           </div>
         </div>
       )}
+
+      <PasswordChangeModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
     </header>
   );
 };

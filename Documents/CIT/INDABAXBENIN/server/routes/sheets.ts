@@ -104,7 +104,8 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
       lastError: undefined,
     });
 
-    replaceAccounts(accounts);
+    // Les mots de passe presents dans le classeur sont haches ici.
+    await replaceAccounts(accounts);
 
     let sessionsUpdated = 0;
     for (const account of accounts) {

@@ -3,8 +3,8 @@ import {
   CheckInRecord,
   ParticipantRole,
   PublicSheetsConfig,
+  PublicUserAccount,
   SessionFeedback,
-  UserAccount,
 } from '../types';
 import { RoleCapabilities } from '../permissions';
 
@@ -68,12 +68,20 @@ async function request<T>(
 export interface AuthPayload {
   session: AuthSession;
   capabilities: RoleCapabilities;
-  profile: (Omit<UserAccount, 'accessCode'> & { hasAccessCode: boolean }) | null;
+  profile: PublicUserAccount | null;
   warning?: string;
 }
 
-export function login(email: string, code?: string): Promise<AuthPayload> {
-  return request<AuthPayload>('/api/auth/login', { method: 'POST', body: { email, code } });
+export function login(email: string, password: string): Promise<AuthPayload> {
+  return request<AuthPayload>('/api/auth/login', { method: 'POST', body: { email, password } });
+}
+
+/** Changement de son propre mot de passe. L'actuel est exigé. */
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: boolean; message: string }> {
+  return request('/api/auth/password', { method: 'POST', body: { currentPassword, newPassword } });
 }
 
 /**
@@ -102,22 +110,31 @@ export function refreshSession(): Promise<AuthPayload & { changed: boolean }> {
  * Comptes et rôles (réservé à canManageRoles côté serveur)
  * ------------------------------------------------------------------ */
 
-type PublicAccount = Omit<UserAccount, 'accessCode'> & { hasAccessCode: boolean };
-
-export async function listAccounts(): Promise<PublicAccount[]> {
-  const data = await request<{ accounts: PublicAccount[] }>('/api/auth/accounts');
+export async function listAccounts(): Promise<PublicUserAccount[]> {
+  const data = await request<{ accounts: PublicUserAccount[] }>('/api/auth/accounts');
   return data.accounts;
+}
+
+export interface AssignRoleResult {
+  account: PublicUserAccount;
+  sessionsUpdated: number;
+  /** Mot de passe généré, transmis une seule fois par le serveur. */
+  generatedPassword?: string;
+  passwordChanged: boolean;
 }
 
 export function assignRole(input: {
   email: string;
   role: ParticipantRole;
   name?: string;
-  status?: UserAccount['status'];
-  accessCode?: string;
+  status?: PublicUserAccount['status'];
+  /** Mot de passe choisi par l'administrateur. */
+  password?: string;
+  /** Demande au serveur d'en générer un et de le renvoyer une fois. */
+  generatePassword?: boolean;
   institution?: string;
   position?: string;
-}): Promise<{ account: PublicAccount; sessionsUpdated: number }> {
+}): Promise<AssignRoleResult> {
   return request('/api/auth/accounts', { method: 'POST', body: input });
 }
 

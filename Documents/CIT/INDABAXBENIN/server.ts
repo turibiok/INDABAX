@@ -33,7 +33,7 @@ app.use("/api/sheets", sheetsRouter);
 app.use("/api/ai", aiRouter);
 
 async function startServer() {
-  initStore();
+  await initStore();
   startSessionSweeper();
 
   const admins = getBootstrapAdminEmails();
@@ -41,6 +41,11 @@ async function startServer() {
     console.warn(
       "ADMIN_EMAILS n'est pas renseigné : si aucun compte n'existe encore, personne ne pourra " +
         "ouvrir l'espace Super-Admin. Ajoutez ADMIN_EMAILS=\"vous@exemple.bj\" dans le fichier .env.",
+    );
+  } else if (!process.env.ADMIN_PASSWORD) {
+    console.warn(
+      `ADMIN_EMAILS est renseigné (${admins.join(", ")}) mais ADMIN_PASSWORD est vide : ` +
+        "ces comptes d'amorçage ne pourront pas se connecter.",
     );
   } else {
     console.log(`Emails administrateurs d'amorçage : ${admins.join(", ")}`);

@@ -57,7 +57,8 @@ export const RoleAccessPanel: React.FC = () => {
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<ParticipantRole>('attendee');
-  const [newCode, setNewCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [autoPassword, setAutoPassword] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
@@ -101,15 +102,22 @@ export const RoleAccessPanel: React.FC = () => {
     run(async () => {
       const message = await assignRole(newEmail, newRole, {
         name: newName.trim() || undefined,
-        accessCode: newCode.trim() || undefined,
         status: 'active',
+        // Soit un mot de passe choisi, soit un mot de passe genere par le
+        // serveur et affiche une seule fois dans le message de retour.
+        password: autoPassword ? undefined : newPassword,
+        generatePassword: autoPassword,
       });
 
       setNewEmail('');
       setNewName('');
-      setNewCode('');
+      setNewPassword('');
       return message;
     });
+
+  /** Regenere le mot de passe d'un compte existant sans toucher a son role. */
+  const handleResetPassword = (email: string, role: ParticipantRole) =>
+    run(() => assignRole(email, role, { generatePassword: true }));
 
   const handleRoleChange = (email: string, role: ParticipantRole) =>
     run(() => assignRole(email, role));
@@ -249,17 +257,29 @@ export const RoleAccessPanel: React.FC = () => {
           <div className="relative">
             <KeyRound className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
-              value={newCode}
-              onChange={event => setNewCode(event.target.value)}
-              placeholder="Code d'accès (optionnel)"
-              className={`${fieldClass} pl-9`}
+              type="text"
+              value={autoPassword ? '' : newPassword}
+              onChange={event => setNewPassword(event.target.value)}
+              disabled={autoPassword}
+              placeholder={autoPassword ? 'Généré par le serveur' : 'Mot de passe (6 caractères min.)'}
+              className={`${fieldClass} pl-9 disabled:opacity-60`}
             />
           </div>
         </div>
 
+        <label className="flex items-center gap-2 text-[11px] font-bold text-stone-700 dark:text-stone-300 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoPassword}
+            onChange={event => setAutoPassword(event.target.checked)}
+            className="w-4 h-4 accent-emerald-600"
+          />
+          Générer le mot de passe automatiquement (affiché une seule fois)
+        </label>
+
         <button
           onClick={handleAdd}
-          disabled={isWorking || !newEmail.trim()}
+          disabled={isWorking || !newEmail.trim() || (!autoPassword && newPassword.length < 6)}
           className="w-full sm:w-auto px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
         >
           {isWorking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
@@ -267,8 +287,9 @@ export const RoleAccessPanel: React.FC = () => {
         </button>
 
         <p className="text-[11px] text-stone-500 leading-relaxed">
-          Un code d&apos;accès rend la connexion à deux facteurs : l&apos;email seul ne suffira plus. Laissez vide pour
-          une connexion par simple email.
+          Chaque compte a besoin d&apos;un mot de passe pour se connecter : l&apos;email seul ne suffit pas. Le serveur
+          n&apos;en conserve qu&apos;une empreinte scrypt — un mot de passe généré ne s&apos;affiche donc qu&apos;une
+          fois, au moment de sa création. Vous pouvez aussi renseigner la colonne « Mot de passe » du classeur.
         </p>
       </div>
 
@@ -324,11 +345,18 @@ export const RoleAccessPanel: React.FC = () => {
                         Moi
                       </span>
                     )}
-                    {account.hasAccessCode && (
-                      <span title="Protégé par un code d'accès" className="inline-flex">
-                        <KeyRound className="w-3 h-3 text-amber-600" />
-                      </span>
-                    )}
+                    <span
+                      title={
+                        account.hasPassword
+                          ? 'Mot de passe défini'
+                          : "Aucun mot de passe : ce compte ne peut pas se connecter"
+                      }
+                      className="inline-flex"
+                    >
+                      <KeyRound
+                        className={`w-3 h-3 ${account.hasPassword ? 'text-emerald-600' : 'text-red-500'}`}
+                      />
+                    </span>
                   </div>
                   <p className="text-[11px] text-stone-600 dark:text-stone-400 truncate">{account.email}</p>
                   {account.institution && (
@@ -367,6 +395,23 @@ export const RoleAccessPanel: React.FC = () => {
                     </option>
                   ))}
                 </select>
+
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Générer un nouveau mot de passe pour ${account.email} ? Ses sessions ouvertes seront fermées.`,
+                      )
+                    ) {
+                      handleResetPassword(account.email, account.role);
+                    }
+                  }}
+                  disabled={isWorking}
+                  className="p-2 text-stone-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl transition cursor-pointer shrink-0"
+                  title="Réinitialiser le mot de passe"
+                >
+                  <KeyRound className="w-4 h-4" />
+                </button>
 
                 <button
                   onClick={() => {

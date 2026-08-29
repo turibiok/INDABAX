@@ -142,8 +142,14 @@ export interface UserAccount {
   name: string;
   role: ParticipantRole;
   status: AccountStatus;
-  /** Code d'acces optionnel : si la cellule est remplie, il est exige a la connexion. */
-  accessCode?: string;
+  /**
+   * Mot de passe en clair. Transitoire : c'est la valeur lue dans la colonne
+   * « Mot de passe » du classeur. Le serveur la hache des sa premiere lecture
+   * et ne la conserve jamais sur disque.
+   */
+  password?: string;
+  /** Empreinte scrypt du mot de passe. Cote serveur uniquement. */
+  passwordHash?: string;
   institution?: string;
   position?: string;
   ticketNumber?: string;
@@ -153,10 +159,12 @@ export interface UserAccount {
 }
 
 /**
- * Compte tel que le serveur l'expose : le code d'acces n'est jamais transmis,
- * seule son existence est signalee.
+ * Compte tel que le serveur l'expose : ni le mot de passe ni son empreinte ne
+ * sont transmis, seule l'existence d'un mot de passe est signalee.
  */
-export type PublicUserAccount = Omit<UserAccount, 'accessCode'> & { hasAccessCode: boolean };
+export type PublicUserAccount = Omit<UserAccount, 'password' | 'passwordHash'> & {
+  hasPassword: boolean;
+};
 
 export type DocLinkKind = 'doc' | 'sheet' | 'slides' | 'form' | 'drive' | 'other';
 

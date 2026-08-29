@@ -3,6 +3,8 @@ import {
   AlertCircle,
   ArrowRight,
   Database,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   Lock,
@@ -21,8 +23,8 @@ export const LoginView: React.FC = () => {
   const { signInWithEmail, isAuthenticating, isSheetsLinked, sheetsConfig, eventConfig } = useEvent();
 
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [needsCode, setNeedsCode] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -30,23 +32,12 @@ export const LoginView: React.FC = () => {
     setError(null);
 
     try {
-      await signInWithEmail(email, code || undefined);
+      await signInWithEmail(email, password);
     } catch (err: any) {
-      const reason = err?.reason;
-
-      if (reason === 'code_required') {
-        setNeedsCode(true);
-        setError("Ce compte est protégé par un code d'accès. Saisissez-le ci-dessous.");
-        return;
-      }
-
-      if (reason === 'bad_code') {
-        setNeedsCode(true);
-        setError("Code d'accès incorrect.");
-        return;
-      }
-
+      // Le serveur ne distingue pas email inconnu et mot de passe faux dans le
+      // même message : c'est lui qui choisit ce qu'il révèle.
       setError(err?.message || 'Connexion impossible.');
+      setPassword('');
     }
   };
 
@@ -121,8 +112,8 @@ export const LoginView: React.FC = () => {
               </span>
               <h2 className="font-heading font-black text-2xl mt-3">Connexion</h2>
               <p className="text-xs text-stone-600 dark:text-stone-400 mt-1.5 leading-relaxed">
-                Saisissez l&apos;adresse email utilisée lors de votre inscription. Nous y retrouvons le rôle que
-                l&apos;organisation vous a assigné.
+                Saisissez l&apos;adresse email de votre inscription et le mot de passe qui vous a été transmis. Le
+                rôle que l&apos;organisation vous a assigné détermine votre interface.
               </p>
             </div>
 
@@ -150,28 +141,35 @@ export const LoginView: React.FC = () => {
                 </div>
               </div>
 
-              {needsCode && (
-                <div className="animate-in fade-in slide-in-from-top-1">
-                  <label
-                    htmlFor="login-code"
-                    className="text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400 block mb-1.5"
+              <div>
+                <label
+                  htmlFor="login-password"
+                  className="text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400 block mb-1.5"
+                >
+                  Mot de passe
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={event => setPassword(event.target.value)}
+                    placeholder="Mot de passe transmis par les organisateurs"
+                    className="w-full pl-10 pr-11 py-3 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-2xl text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(current => !current)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition cursor-pointer"
+                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                   >
-                    Code d&apos;accès
-                  </label>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      id="login-code"
-                      type="password"
-                      autoComplete="one-time-code"
-                      value={code}
-                      onChange={event => setCode(event.target.value)}
-                      placeholder="Code transmis par les organisateurs"
-                      className="w-full pl-10 pr-4 py-3 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-2xl text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 transition"
-                    />
-                  </div>
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
-              )}
+              </div>
 
               {error && (
                 <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 rounded-2xl text-xs font-semibold flex items-start gap-2 animate-in fade-in">
@@ -182,7 +180,7 @@ export const LoginView: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={isAuthenticating || !email.trim()}
+                disabled={isAuthenticating || !email.trim() || !password}
                 className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-700 to-emerald-600 hover:from-emerald-800 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-800/20 transition-all active:scale-98 cursor-pointer"
               >
                 {isAuthenticating ? (
@@ -227,8 +225,9 @@ export const LoginView: React.FC = () => {
                   <Lock className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-px" />
                   <span>
                     <strong>Première installation ?</strong> Renseignez <code className="font-mono">ADMIN_EMAILS</code>
-                    {' '}dans le fichier <code className="font-mono">.env</code> du serveur, connectez-vous avec cet
-                    email, puis liez le classeur depuis l&apos;espace Super-Admin.
+                    {' '}et <code className="font-mono">ADMIN_PASSWORD</code> dans le fichier{' '}
+                    <code className="font-mono">.env</code> du serveur, connectez-vous avec cet email, puis liez le
+                    classeur depuis l&apos;espace Super-Admin.
                   </span>
                 </p>
               )}

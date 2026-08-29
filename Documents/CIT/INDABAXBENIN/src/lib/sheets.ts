@@ -275,7 +275,10 @@ export function normalizeEmail(email: string): string {
 
 /**
  * Convertit une ligne de l'onglet `Utilisateurs` en compte applicatif.
- * Les en-tetes sont tolerants : Email / Adresse email / Mail, Role / Fonction, etc.
+ *
+ * Les en-tetes sont tolerants : Email / Adresse email / Mail, Role / Fonction,
+ * Mot de passe / Password / Code, etc. Le mot de passe ainsi lu est en clair :
+ * il est destine a etre hache immediatement par le serveur.
  */
 export function mapUserAccount(row: Record<string, string>): UserAccount | null {
   const email = normalizeEmail(
@@ -292,7 +295,9 @@ export function mapUserAccount(row: Record<string, string>): UserAccount | null 
     name,
     role: parseRole(pick(row, 'role', 'profil', 'fonction', 'type', 'categorie')),
     status: parseStatus(pick(row, 'status', 'statut', 'etat', 'actif', 'validation')),
-    accessCode: pick(row, 'access code', 'code', 'code acces', "code d'acces", 'pin') || undefined,
+    password:
+      pick(row, 'mot de passe', 'password', 'motdepasse', 'code', 'code acces', "code d'acces", 'pin') ||
+      undefined,
     institution:
       pick(row, 'institution', 'organisation', 'structure', 'entreprise', 'universite', 'affiliation') ||
       undefined,
