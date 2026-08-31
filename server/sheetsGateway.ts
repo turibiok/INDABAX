@@ -298,7 +298,13 @@ export async function writeRows(
       );
     }
 
-    let parsed: { ok?: boolean; written?: number; error?: string } | null = null;
+    let parsed: {
+      ok?: boolean;
+      written?: number;
+      error?: string;
+      sheet?: string;
+      created?: boolean;
+    } | null = null;
     try {
       parsed = JSON.parse(body);
     } catch {
@@ -314,6 +320,20 @@ export async function writeRows(
         `Le Apps Script a signalé un échec : ${parsed?.error || body.slice(0, 200)}`,
         502,
         'webhook_error',
+      );
+    }
+
+    // Un onglet fraichement cree signifie que le script n'a pas trouve celui
+    // attendu : les lignes partent alors dans un doublon, a cote de l'onglet
+    // que l'organisateur regarde. Mieux vaut le dire que de laisser chercher.
+    if (parsed.created) {
+      throw new SheetError(
+        `Le Apps Script n'a trouvé aucun onglet nommé « ${table} » et en a créé un nouveau. ` +
+          `Renommez votre onglet en « ${table} », ou remplacez le script par la version ` +
+          `fournie par l'application, qui retrouve l'onglet malgré les accents, la casse et ` +
+          `les espaces. Pensez à supprimer l'onglet en double.`,
+        409,
+        'sheet_created',
       );
     }
 

@@ -195,12 +195,40 @@ export const SHEET_TEMPLATE_HEADERS: Record<string, string[]> = {
  * en « Application Web » accessible à tout le monde. Son URL se colle ensuite
  * dans le champ « Apps Script » des paramètres, où elle reste côté serveur.
  */
-export const APPS_SCRIPT_SNIPPET = `function doPost(e) {
+export const APPS_SCRIPT_SNIPPET = `/** Normalise un nom d'onglet : sans accents, sans ponctuation, en minuscules. */
+function normalize(name) {
+  return String(name)
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * Retrouve un onglet même si son nom diffère par la casse, les accents, les
+ * espaces ou un tiret : « Check-ins », « check ins » et « Checkins » désignent
+ * le même onglet. Sans cette tolérance, le script créerait un doublon à côté
+ * de l'onglet que vous regardez, et vos écritures sembleraient disparaître.
+ */
+function findSheet(spreadsheet, wanted) {
+  var target = normalize(wanted);
+  var sheets = spreadsheet.getSheets();
+
+  for (var i = 0; i < sheets.length; i++) {
+    if (normalize(sheets[i].getName()) === target) return sheets[i];
+  }
+  return null;
+}
+
+function doPost(e) {
   var payload = JSON.parse(e.postData.contents);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(payload.table);
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = findSheet(spreadsheet, payload.table);
+  var created = false;
 
   if (!sheet) {
-    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(payload.table);
+    sheet = spreadsheet.insertSheet(payload.table);
+    created = true;
   }
 
   var headers = sheet.getLastRow() > 0
@@ -217,7 +245,14 @@ export const APPS_SCRIPT_SNIPPET = `function doPost(e) {
     }));
   });
 
+  // Le nom réel de l'onglet est renvoyé : l'application peut ainsi signaler
+  // qu'elle a écrit ailleurs que prévu.
   return ContentService
-    .createTextOutput(JSON.stringify({ ok: true, written: payload.rows.length }))
+    .createTextOutput(JSON.stringify({
+      ok: true,
+      written: payload.rows.length,
+      sheet: sheet.getName(),
+      created: created
+    }))
     .setMimeType(ContentService.MimeType.JSON);
 }`;
