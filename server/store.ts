@@ -419,7 +419,15 @@ export async function ensureSuperAdmin(): Promise<
     return { created: false, reason: 'not_configured' };
   }
 
-  if (findAccount(email)) {
+  const existing = findAccount(email);
+
+  // Un compte de démonstration ne doit pas masquer le compte configuré : en
+  // développement, l'amorçage s'exécute avant ce provisionnement, et l'email
+  // choisi peut se trouver dans les données de démo. Sans cette exception, le
+  // mot de passe du fichier .env serait silencieusement ignoré.
+  const isDemoSeed = existing?.assignedBy === 'Amorcage initial';
+
+  if (existing && !isDemoSeed) {
     return { created: false, reason: 'already_exists' };
   }
 
