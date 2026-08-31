@@ -15,6 +15,7 @@ import {
 import { mapUserAccounts } from "./src/lib/sheets";
 import { expectedHeadersFor, readTab } from "./server/sheetsGateway";
 import { isCookieSecure, sessionCount, startSessionSweeper } from "./server/sessions";
+import { startTokenSweeper } from "./server/resetTokens";
 
 dotenv.config();
 
@@ -46,6 +47,7 @@ app.use("/api/ai", aiRouter);
 async function startServer() {
   await initStore();
   startSessionSweeper();
+  startTokenSweeper();
 
   // Compte super-admin decrit dans l'environnement.
   const provisioned = await ensureSuperAdmin();

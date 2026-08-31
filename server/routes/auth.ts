@@ -7,6 +7,7 @@ import {
   getAccounts,
   getSheetsConfig,
   isBootstrapAdmin,
+  clearPassword,
   removeAccount,
   replaceAccounts,
   resolvePasswordHash,
@@ -14,13 +15,15 @@ import {
   toPublicAccount,
   upsertAccount,
 } from '../store';
+import { hashPassword, MIN_PASSWORD_LENGTH, validatePassword, verifyPassword } from '../passwords';
 import {
-  generatePassword,
-  hashPassword,
-  MIN_PASSWORD_LENGTH,
-  validatePassword,
-  verifyPassword,
-} from '../passwords';
+  consumeToken,
+  isThrottled,
+  issueToken,
+  noteRequest,
+  peekToken,
+  revokeTokensFor,
+} from '../resetTokens';
 import {
   AuthedRequest,
   clearSessionCookie,
@@ -35,7 +38,13 @@ import {
   updateSessionRole,
   updateSessionsForEmail,
 } from '../sessions';
-import { expectedHeadersFor, readTab, SheetError } from '../sheetsGateway';
+import {
+  expectedHeadersFor,
+  isMailerConfigured,
+  readTab,
+  sendEmail,
+  SheetError,
+} from '../sheetsGateway';
 
 export const authRouter = Router();
 
@@ -320,6 +329,275 @@ authRouter.post('/refresh', requireAuth, async (req: AuthedRequest, res) => {
 });
 
 /* ------------------------------------------------------------------ *
+ * Inscription : l'utilisateur choisit lui-meme son mot de passe
+ * ------------------------------------------------------------------ */
+
+/** URL publique de l'application, pour construire le lien de reinitialisation. */
+function publicBaseUrl(req: AuthedRequest): string {
+  const configured = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+
+  // A defaut, on reconstruit depuis la requete : derriere un reverse proxy,
+  // l'en-tete X-Forwarded-Proto porte le schema reel.
+  const protocol = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0] || req.protocol;
+  return `${protocol}://${req.get('host')}`;
+}
+
+/**
+ * Un email inscriptible est un email deja connu de l'organisation — present
+ * dans le classeur ou dans la table du serveur — mais dont le compte n'a pas
+ * encore de mot de passe.
+ *
+ * L'inscription est donc une activation, pas une creation libre : les roles
+ * restent decides par l'administrateur, et personne ne s'invite tout seul.
+ */
+authRouter.post('/register', async (req: AuthedRequest, res) => {
+  const email = normalizeEmail(typeof req.body?.email === 'string' ? req.body.email : '');
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+  if (!email.includes('@') || !email.includes('.')) {
+    return res.status(400).json({ error: 'Adresse email invalide.', reason: 'invalid_email' });
+  }
+
+  const invalid = validatePassword(password);
+  if (invalid) {
+    return res.status(400).json({ error: invalid, reason: 'weak_password' });
+  }
+
+  let resolution: Resolution;
+  try {
+    resolution = await resolveAccount(email);
+  } catch (error: any) {
+    const status = error instanceof SheetError ? error.status : 500;
+    return res.status(status).json({
+      error:
+        error instanceof SheetError && error.reason === 'not_found'
+          ? "Cet email n'est pas enregistré pour l'événement. Demandez à un organisateur de vous ajouter."
+          : error.message,
+      reason: error instanceof SheetError ? error.reason : 'unknown',
+    });
+  }
+
+  const { account, source, passwordHash } = resolution;
+
+  if (account.status === 'suspended') {
+    return res.status(403).json({ error: "Ce compte a été suspendu par l'administrateur.", reason: 'suspended' });
+  }
+
+  // Un compte qui a deja un mot de passe ne se reinscrit pas : il se connecte,
+  // ou passe par l'oubli de mot de passe.
+  if (passwordHash) {
+    return res.status(409).json({
+      error:
+        'Ce compte a déjà un mot de passe. Connectez-vous, ou utilisez « Mot de passe oublié » si vous ne le retrouvez pas.',
+      reason: 'already_registered',
+    });
+  }
+
+  const hash = await hashPassword(password);
+
+  upsertAccount({
+    email,
+    name: account.name,
+    role: account.role,
+    status: account.status,
+    passwordHash: hash,
+    institution: account.institution,
+    position: account.position,
+    ticketNumber: account.ticketNumber,
+    avatarUrl: account.avatarUrl,
+    assignedBy: source === 'sheet' ? 'Synchronisation classeur' : account.assignedBy,
+  });
+
+  revokeTokensFor(email);
+
+  const session = createSession({
+    email,
+    name: account.name,
+    role: account.role,
+    status: account.status,
+    source,
+  });
+
+  setSessionCookie(res, session);
+
+  res.json({
+    session: toClientSession(session),
+    capabilities: capabilitiesFor(session.role),
+    profile: toPublicAccount({ ...account, email, passwordHash: hash }),
+  });
+});
+
+/**
+ * Indique si un email doit s'inscrire ou se connecter.
+ *
+ * Utile pour orienter la personne sans lui faire deviner. La reponse ne dit
+ * jamais si l'email existe : seulement s'il est activable, ce qui ne renseigne
+ * pas un tiers sur la presence d'un compte.
+ */
+authRouter.post('/status', async (req, res) => {
+  const email = normalizeEmail(typeof req.body?.email === 'string' ? req.body.email : '');
+
+  if (!email.includes('@')) {
+    return res.status(400).json({ error: 'Adresse email invalide.' });
+  }
+
+  try {
+    const { passwordHash } = await resolveAccount(email);
+    return res.json({ known: true, needsRegistration: !passwordHash });
+  } catch {
+    return res.json({ known: false, needsRegistration: false });
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * Mot de passe oublie
+ * ------------------------------------------------------------------ */
+
+authRouter.post('/forgot', async (req: AuthedRequest, res) => {
+  const email = normalizeEmail(typeof req.body?.email === 'string' ? req.body.email : '');
+
+  if (!email.includes('@') || !email.includes('.')) {
+    return res.status(400).json({ error: 'Adresse email invalide.', reason: 'invalid_email' });
+  }
+
+  // Reponse volontairement identique dans tous les cas : elle ne doit pas
+  // reveler quels emails sont enregistres.
+  const neutral = {
+    ok: true,
+    message:
+      'Si cet email est enregistré pour l’événement, un lien de réinitialisation vient de lui être envoyé. ' +
+      'Le lien est valable une heure.',
+  };
+
+  if (isThrottled(email)) {
+    return res.status(429).json({
+      error: 'Un lien a déjà été demandé il y a moins d’une minute. Vérifiez votre boîte, spam inclus.',
+      reason: 'rate_limited',
+    });
+  }
+
+  // Avant toute recherche : sans cette trace, le refroidissement ne
+  // s'appliquerait qu'aux emails enregistrés, et les distinguerait donc.
+  noteRequest(email);
+
+  // De même, l'absence de messagerie est un défaut de configuration global :
+  // le dire tout de suite, pour tout email, n'apprend rien sur cet email.
+  if (!isMailerConfigured()) {
+    return res.status(409).json({
+      error:
+        "L'envoi d'emails n'est pas configuré pour cette application. " +
+        'Demandez à un organisateur de réinitialiser votre mot de passe : ' +
+        'vous pourrez alors en choisir un nouveau vous-même.',
+      reason: 'no_mailer',
+    });
+  }
+
+  let account;
+  try {
+    account = (await resolveAccount(email)).account;
+  } catch {
+    return res.json(neutral);
+  }
+
+  if (account.status === 'suspended') return res.json(neutral);
+
+  const { token, expiresAt } = issueToken(email);
+  const link = `${publicBaseUrl(req)}/?reset=${encodeURIComponent(token)}`;
+
+  try {
+    await sendEmail({
+      to: email,
+      subject: 'IndabaX Bénin 2026 — réinitialisation de votre mot de passe',
+      body:
+        `Bonjour ${account.name},\n\n` +
+        `Vous avez demandé à réinitialiser votre mot de passe pour l'application IndabaX Bénin 2026.\n\n` +
+        `Ouvrez ce lien pour en choisir un nouveau :\n${link}\n\n` +
+        `Ce lien est valable jusqu'à ${expiresAt.toLocaleString('fr-FR')} et ne fonctionne qu'une fois.\n\n` +
+        `Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe reste inchangé.\n\n` +
+        `— L'équipe IndabaX Bénin\n`,
+    });
+  } catch (error: any) {
+    // L'envoi a echoue : le jeton ne sert a rien, autant le retirer.
+    revokeTokensFor(email);
+
+    const status = error instanceof SheetError ? error.status : 500;
+    return res.status(status).json({
+      error:
+        `L'envoi de l'email a échoué (${error.message}). ` +
+        'Demandez à un organisateur de réinitialiser votre mot de passe.',
+      reason: error instanceof SheetError ? error.reason : 'mailer_error',
+    });
+  }
+
+  res.json(neutral);
+});
+
+/** Verifie un lien avant d'afficher le formulaire, sans le consommer. */
+authRouter.get('/reset', (req, res) => {
+  const token = typeof req.query.token === 'string' ? req.query.token : '';
+  const entry = peekToken(token);
+
+  if (!entry) {
+    return res.status(410).json({
+      error: 'Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.',
+      reason: 'invalid_token',
+    });
+  }
+
+  res.json({ valid: true, email: entry.email });
+});
+
+authRouter.post('/reset', async (req: AuthedRequest, res) => {
+  const token = typeof req.body?.token === 'string' ? req.body.token : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+  const invalid = validatePassword(password);
+  if (invalid) {
+    return res.status(400).json({ error: invalid, reason: 'weak_password' });
+  }
+
+  const entry = consumeToken(token);
+  if (!entry) {
+    return res.status(410).json({
+      error: 'Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.',
+      reason: 'invalid_token',
+    });
+  }
+
+  const hash = await hashPassword(password);
+
+  if (!setPasswordHash(entry.email, hash)) {
+    // Le compte vient du classeur sans avoir encore ete enregistre localement.
+    try {
+      const { account, source } = await resolveAccount(entry.email);
+      upsertAccount({
+        email: entry.email,
+        name: account.name,
+        role: account.role,
+        status: account.status,
+        passwordHash: hash,
+        institution: account.institution,
+        position: account.position,
+        assignedBy: source === 'sheet' ? 'Synchronisation classeur' : account.assignedBy,
+      });
+    } catch {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
+  }
+
+  // Un mot de passe change ferme les sessions ouvertes : si quelqu'un d'autre
+  // etait connecte sur ce compte, il perd l'acces.
+  revokeSessionsForEmail(entry.email);
+
+  res.json({
+    ok: true,
+    email: entry.email,
+    message: 'Mot de passe enregistré. Vous pouvez maintenant vous connecter.',
+  });
+});
+
+/* ------------------------------------------------------------------ *
  * POST /api/auth/password — changement de son propre mot de passe
  * ------------------------------------------------------------------ */
 
@@ -384,28 +662,14 @@ authRouter.post('/accounts', requireCapability('canManageRoles'), async (req: Au
     return res.status(400).json({ error: 'Rôle inconnu.' });
   }
 
-  // Mot de passe : fourni par l'admin, ou genere si demande. Il n'est renvoye
-  // en clair qu'une seule fois, pour que l'admin puisse le transmettre.
-  const wantsGenerated = req.body?.generatePassword === true;
-  const providedPassword = typeof req.body?.password === 'string' ? req.body.password : '';
-
-  let plainPassword: string | undefined;
-  if (wantsGenerated) {
-    plainPassword = generatePassword();
-  } else if (providedPassword) {
-    const invalid = validatePassword(providedPassword);
-    if (invalid) {
-      return res.status(400).json({ error: invalid, reason: 'weak_password' });
-    }
-    plainPassword = providedPassword;
-  }
-
+  // L'administrateur n'attribue plus de mot de passe : il désigne un email et
+  // un rôle, et la personne choisit elle-même son mot de passe en s'inscrivant.
+  // Personne d'autre qu'elle ne le connaît donc jamais.
   const account = upsertAccount({
     email,
     role,
     status,
     name: typeof req.body?.name === 'string' ? req.body.name : undefined,
-    passwordHash: plainPassword ? await hashPassword(plainPassword) : undefined,
     institution: typeof req.body?.institution === 'string' ? req.body.institution : undefined,
     position: typeof req.body?.position === 'string' ? req.body.position : undefined,
     assignedBy: req.session!.name,
@@ -414,18 +678,32 @@ authRouter.post('/accounts', requireCapability('canManageRoles'), async (req: Au
   // Les sessions ouvertes de cet email suivent immediatement le nouveau role.
   const touched = updateSessionsForEmail(email, { role: account.role, status: account.status });
 
-  // Un mot de passe remplace ferme les sessions ouvertes du compte concerne,
-  // sauf s'il s'agit de l'admin lui-meme.
-  if (plainPassword && email !== req.session!.email) {
-    revokeSessionsForEmail(email);
-  }
-
   res.json({
     account: toPublicAccount(account),
     sessionsUpdated: touched,
-    // Transmis une seule fois : le serveur n'en garde que l'empreinte.
-    generatedPassword: wantsGenerated ? plainPassword : undefined,
-    passwordChanged: Boolean(plainPassword),
+    needsRegistration: !account.passwordHash,
+  });
+});
+
+/**
+ * Réinitialisation par l'organisateur : le mot de passe est effacé, pas
+ * remplacé. Le compte redevient « à activer », et la personne en choisit un
+ * nouveau en s'inscrivant — l'organisateur n'a donc jamais à en connaître un.
+ */
+authRouter.post('/accounts/:email/reset-password', requireCapability('canManageRoles'), (req: AuthedRequest, res) => {
+  const email = normalizeEmail(req.params.email);
+
+  if (!clearPassword(email)) {
+    return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+  }
+
+  // Le compte ne doit plus pouvoir servir avec l'ancien mot de passe.
+  revokeSessionsForEmail(email);
+  revokeTokensFor(email);
+
+  res.json({
+    ok: true,
+    message: `Mot de passe de ${email} effacé. La personne doit maintenant s'inscrire pour en choisir un nouveau.`,
   });
 });
 

@@ -61,6 +61,8 @@ interface EventContextType {
   authWarning: string | null;
   isAuthenticating: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
+  /** Inscription : la personne choisit elle-même son mot de passe. */
+  registerWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Changement de son propre mot de passe : l'actuel est exigé. */
   changeMyPassword: (currentPassword: string, newPassword: string) => Promise<string>;
@@ -77,6 +79,8 @@ interface EventContextType {
   userAccounts: PublicUserAccount[];
   assignRole: (email: string, role: ParticipantRole, extra?: AssignRoleExtra) => Promise<string>;
   setAccountStatus: (email: string, status: PublicUserAccount['status']) => Promise<string>;
+  /** Réinitialisation par l'organisateur : le mot de passe est effacé. */
+  resetAccountPassword: (email: string) => Promise<string>;
   removeAccount: (email: string) => Promise<string>;
   refreshAccounts: () => Promise<void>;
   reloadAccountsFromSheet: () => Promise<string>;
@@ -194,10 +198,6 @@ interface EventContextType {
 export interface AssignRoleExtra {
   name?: string;
   status?: PublicUserAccount['status'];
-  /** Mot de passe choisi par l'administrateur. */
-  password?: string;
-  /** Demande au serveur d'en générer un, renvoyé une seule fois. */
-  generatePassword?: boolean;
   institution?: string;
   position?: string;
 }
@@ -815,6 +815,23 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const registerWithEmail = async (email: string, password: string) => {
+    setIsAuthenticating(true);
+    setAuthWarning(null);
+
+    try {
+      const payload = await api.register(email, password);
+      applyAuthPayload(payload);
+      setActiveTab(payload.capabilities.tabs[0] || 'schedule');
+
+      try {
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#f59e0b'] });
+      } catch (e) {}
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
   const signOut = async () => {
     try {
       await api.logout();
@@ -921,13 +938,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ? ` ${result.sessionsUpdated} session(s) ouverte(s) mise(s) à jour immédiatement.`
         : '';
 
-    // Le mot de passe généré ne transite qu'une fois : il est affiché à
-    // l'administrateur pour qu'il le transmette, puis oublié.
-    const passwordNote = result.generatedPassword
-      ? ` Mot de passe à transmettre : ${result.generatedPassword}`
-      : result.passwordChanged
-        ? ' Mot de passe enregistré.'
-        : '';
+    // Aucun mot de passe n'est attribué : la personne choisit le sien en
+    // s'inscrivant, ce qu'il faut lui dire.
+    const passwordNote = result.needsRegistration
+      ? " Elle doit maintenant s'inscrire avec cet email pour choisir son mot de passe."
+      : '';
 
     return `Rôle « ${roleLabel} » attribué à ${cleanEmail}.${sessionNote}${passwordNote}`;
   };
@@ -950,6 +965,20 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return status === 'suspended'
       ? `${cleanEmail} suspendu : ses sessions ouvertes ont été fermées.`
       : `Statut de ${cleanEmail} mis à jour.`;
+  };
+
+  const resetAccountPassword = async (email: string): Promise<string> => {
+    const cleanEmail = normalizeEmail(email);
+    const result = await api.clearAccountPassword(cleanEmail);
+
+    // Le compte redevient « à activer » : la liste doit le montrer.
+    setUserAccounts(prev =>
+      prev.map(account =>
+        normalizeEmail(account.email) === cleanEmail ? { ...account, hasPassword: false } : account,
+      ),
+    );
+
+    return result.message;
   };
 
   const removeAccount = async (email: string): Promise<string> => {
@@ -1663,6 +1692,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       authWarning,
       isAuthenticating,
       signInWithEmail,
+      registerWithEmail,
       signOut,
       changeMyPassword,
       realRole,
@@ -1674,6 +1704,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       userAccounts,
       assignRole,
       setAccountStatus,
+      resetAccountPassword,
       removeAccount,
       refreshAccounts,
       reloadAccountsFromSheet,

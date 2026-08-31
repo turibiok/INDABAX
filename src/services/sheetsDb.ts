@@ -222,6 +222,26 @@ function findSheet(spreadsheet, wanted) {
 
 function doPost(e) {
   var payload = JSON.parse(e.postData.contents);
+
+  // Envoi d'email : sert aux liens de réinitialisation de mot de passe.
+  // Le mail part de votre compte Google, sans service tiers.
+  if (payload.action === 'email') {
+    try {
+      MailApp.sendEmail({
+        to: payload.to,
+        subject: payload.subject,
+        body: payload.body
+      });
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: true, sent: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = findSheet(spreadsheet, payload.table);
   var created = false;

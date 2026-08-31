@@ -235,6 +235,88 @@ export function forgetResolvedTabs(): void {
   resolvedGids.clear();
 }
 
+/**
+ * Envoie un email via le Apps Script du classeur.
+ *
+ * Le script tourne sous le compte Google propriétaire du classeur : l'envoi ne
+ * demande donc aucun service tiers ni clé supplémentaire. En contrepartie, le
+ * quota d'envoi de ce compte s'applique, et le script doit avoir été autorisé
+ * à envoyer des mails lors de son déploiement.
+ */
+/** Dit si un Apps Script est configuré, donc si un email peut être envoyé. */
+export function isMailerConfigured(): boolean {
+  return getSheetsConfig().writeWebhookUrl.trim().length > 0;
+}
+
+export async function sendEmail(input: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ sent: true }> {
+  const webhookUrl = getSheetsConfig().writeWebhookUrl.trim();
+
+  if (!webhookUrl) {
+    throw new SheetError(
+      "Aucun Apps Script n'est configuré : l'application ne peut pas envoyer d'email.",
+      409,
+      'no_mailer',
+    );
+  }
+
+  if (!isAllowedGoogleUrl(webhookUrl)) {
+    throw new SheetError("L'URL du Apps Script enregistrée est invalide.", 400, 'bad_webhook');
+  }
+
+  const response = await fetchWithTimeout(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'email', to: input.to, subject: input.subject, body: input.body }),
+  });
+
+  const body = await response.text();
+  const head = body.trimStart().slice(0, 200).toLowerCase();
+
+  if (!response.ok || head.startsWith('<!doctype html') || head.startsWith('<html')) {
+    throw new SheetError(
+      "Le Apps Script n'a pas pu envoyer l'email. Vérifiez que le déploiement est accessible à " +
+        '« Tout le monde » et qu\'il a été autorisé à envoyer des mails.',
+      502,
+      'mailer_unreachable',
+    );
+  }
+
+  let parsed: { ok?: boolean; error?: string; unsupported?: boolean } | null = null;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new SheetError(
+      `Réponse illisible du Apps Script : ${body.slice(0, 200)}`,
+      502,
+      'mailer_bad_response',
+    );
+  }
+
+  // Un script d'une version antérieure ne connaît pas l'action « email ».
+  if (parsed?.unsupported) {
+    throw new SheetError(
+      "Le Apps Script déployé ne sait pas envoyer d'email : recollez la version fournie par " +
+        "l'application, puis redéployez-la.",
+      409,
+      'mailer_outdated',
+    );
+  }
+
+  if (parsed?.ok !== true) {
+    throw new SheetError(
+      `Le Apps Script a signalé un échec d'envoi : ${parsed?.error || body.slice(0, 200)}`,
+      502,
+      'mailer_error',
+    );
+  }
+
+  return { sent: true };
+}
+
 /** Ecrit des lignes dans un onglet, via Apps Script ou l'API AppSheet. */
 export async function writeRows(
   table: string,

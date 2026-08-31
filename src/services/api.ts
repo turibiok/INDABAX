@@ -85,6 +85,44 @@ export function changePassword(
 }
 
 /**
+ * Inscription : la personne choisit elle-même son mot de passe.
+ *
+ * C'est une activation, pas une création libre — l'email doit déjà figurer
+ * dans la base des comptes, où l'administrateur a fixé le rôle.
+ */
+export function register(email: string, password: string): Promise<AuthPayload> {
+  return request<AuthPayload>('/api/auth/register', { method: 'POST', body: { email, password } });
+}
+
+/** Dit si un email doit s'inscrire ou se connecter, pour orienter la saisie. */
+export function accountStatus(email: string): Promise<{ known: boolean; needsRegistration: boolean }> {
+  return request('/api/auth/status', { method: 'POST', body: { email } });
+}
+
+/** Demande un lien de réinitialisation par email. */
+export function forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
+  return request('/api/auth/forgot', { method: 'POST', body: { email } });
+}
+
+/** Vérifie un lien de réinitialisation sans le consommer. */
+export function checkResetToken(token: string): Promise<{ valid: boolean; email: string }> {
+  return request(`/api/auth/reset?token=${encodeURIComponent(token)}`);
+}
+
+/** Choisit un nouveau mot de passe à partir d'un lien reçu par email. */
+export function resetPassword(
+  token: string,
+  password: string,
+): Promise<{ ok: boolean; email: string; message: string }> {
+  return request('/api/auth/reset', { method: 'POST', body: { token, password } });
+}
+
+/** Réinitialisation par l'organisateur : le mot de passe est effacé. */
+export function clearAccountPassword(email: string): Promise<{ ok: boolean; message: string }> {
+  return request(`/api/auth/accounts/${encodeURIComponent(email)}/reset-password`, { method: 'POST' });
+}
+
+/**
  * État de la session au démarrage. `null` si personne n'est connecté.
  * La sonde répond 200 dans les deux cas : pas d'erreur en console.
  */
@@ -118,20 +156,21 @@ export async function listAccounts(): Promise<PublicUserAccount[]> {
 export interface AssignRoleResult {
   account: PublicUserAccount;
   sessionsUpdated: number;
-  /** Mot de passe généré, transmis une seule fois par le serveur. */
-  generatedPassword?: string;
-  passwordChanged: boolean;
+  /** Le compte n'a pas encore de mot de passe : la personne doit s'inscrire. */
+  needsRegistration: boolean;
 }
 
+/**
+ * Attribution d'un rôle à un email.
+ *
+ * Aucun mot de passe n'est transmis : c'est la personne qui choisit le sien en
+ * s'inscrivant, et personne d'autre ne le connaît jamais.
+ */
 export function assignRole(input: {
   email: string;
   role: ParticipantRole;
   name?: string;
   status?: PublicUserAccount['status'];
-  /** Mot de passe choisi par l'administrateur. */
-  password?: string;
-  /** Demande au serveur d'en générer un et de le renvoyer une fois. */
-  generatePassword?: boolean;
   institution?: string;
   position?: string;
 }): Promise<AssignRoleResult> {

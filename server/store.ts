@@ -340,6 +340,24 @@ export function setPasswordHash(email: string, passwordHash: string): boolean {
   return true;
 }
 
+/**
+ * Efface le mot de passe d'un compte : il redevient « à activer ».
+ *
+ * C'est la réinitialisation par l'organisateur. La personne choisit ensuite
+ * elle-même un nouveau mot de passe via l'inscription, sans que personne
+ * n'ait eu à en connaître un.
+ */
+export function clearPassword(email: string): boolean {
+  const clean = normalizeEmail(email);
+  const account = state.accounts.find(item => normalizeEmail(item.email) === clean);
+  if (!account) return false;
+
+  delete account.passwordHash;
+  delete account.password;
+  writeStateToDisk();
+  return true;
+}
+
 export function removeAccount(email: string): boolean {
   const clean = normalizeEmail(email);
   const before = state.accounts.length;
