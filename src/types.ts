@@ -115,12 +115,19 @@ export interface NetworkingConnection {
 export interface PublicSheetsConfig {
   /** Lien du classeur Google Sheet qui sert de base de donnees (celui d'AppSheet). */
   masterSheetUrl: string;
-  /** Noms des onglets du classeur. */
-  usersTab: string;
-  participantsTab: string;
+  /**
+   * Noms des onglets du classeur.
+   *
+   * « profilesTab » remplace les deux anciens onglets, comptes et annuaire :
+   * une personne y tient une seule ligne, qui sert autant à la connexion
+   * qu'à l'affichage de son profil.
+   */
+  profilesTab: string;
   sessionsTab: string;
   checkInsTab: string;
   feedbacksTab: string;
+  announcementsTab: string;
+  messagesTab: string;
   isLinked: boolean;
   autoSync: boolean;
   lastSyncTimestamp?: string;
@@ -156,6 +163,13 @@ export interface UserAccount {
   avatarUrl?: string;
   assignedBy?: string;
   assignedAt?: string;
+  /* Informations de profil, venues de la même ligne du classeur. */
+  country?: string;
+  city?: string;
+  bio?: string;
+  phone?: string;
+  linkedin?: string;
+  interests?: string[];
 }
 
 /**

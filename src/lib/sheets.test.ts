@@ -154,6 +154,15 @@ for (const template of SHEET_TEMPLATES) {
     table.headers,
     template.headers.map(normalizeHeader),
   );
+
+  // Une ligne d'exemple plus courte que ses en-tetes decalerait tout ce qui
+  // la suit dans le CSV telecharge par les organisateurs. C'est arrive en
+  // ajoutant une colonne sans completer les exemples.
+  check(
+    `${template.tab} : lignes d exemple alignees sur les en-tetes`,
+    template.rows.filter(row => row.length !== template.headers.length).length,
+    0,
+  );
   check(`${template.tab} : ${template.rows.length} ligne(s) relues`, table.rows.length, template.rows.length);
 
   for (const required of template.requiredColumns) {
@@ -163,16 +172,24 @@ for (const template of SHEET_TEMPLATES) {
   }
 }
 
-console.log('\n--- Le modele Utilisateurs produit des comptes exploitables ---');
+console.log('\n--- Le modele Participants produit des comptes exploitables ---');
 
-const usersTemplate = SHEET_TEMPLATES.find(t => t.tab === 'Utilisateurs')!;
-const templateAccounts = mapUserAccounts(toTable(parseCsv(templateToCsv(usersTemplate))));
+const profilesTemplate = SHEET_TEMPLATES.find(t => t.tab === 'Participants')!;
+const templateAccounts = mapUserAccounts(toTable(parseCsv(templateToCsv(profilesTemplate))));
 
-check('tous les comptes du modele sont reconnus', templateAccounts.length, usersTemplate.rows.length);
+check('tous les comptes du modele sont reconnus', templateAccounts.length, profilesTemplate.rows.length);
+
+// Le modele livre des empreintes vides : chaque personne choisit son mot de
+// passe elle-meme. Aucun secret ne doit donc sortir de cette lecture.
 check(
-  'chaque compte a un mot de passe',
-  templateAccounts.filter(account => account.password).length,
-  usersTemplate.rows.length,
+  'aucun mot de passe ni empreinte dans le modele',
+  templateAccounts.filter(account => account.password || account.passwordHash).length,
+  0,
+);
+check(
+  'les informations de profil accompagnent le compte',
+  templateAccounts.filter(a => a.city && a.country && a.interests && a.interests.length > 0).length,
+  profilesTemplate.rows.length,
 );
 check(
   'les six roles du modele sont couverts',
@@ -221,48 +238,63 @@ check(
 );
 
 console.log('\n--- scoreHeaders ---');
-const USERS = SHEET_TEMPLATES.find(t => t.tab === 'Utilisateurs')!.headers;
-const PARTICIPANTS = SHEET_TEMPLATES.find(t => t.tab === 'Participants')!.headers;
+const headersOf = (tab: string) => SHEET_TEMPLATES.find(t => t.tab === tab)!.headers;
 
-check('un onglet se reconnait a lui-meme', scoreHeaders(USERS, USERS), 1);
-// Les modeles partagent Email, Nom, Role, Institution et Poste : Participants
-// atteint donc 5/8 face aux colonnes de Utilisateurs. C'est au-dessus d'un
-// seuil naif, d'ou le seuil d'acceptation eleve (0,85) cote serveur.
-check('recouvrement mesure entre les deux modeles', scoreHeaders(PARTICIPANTS, USERS), 0.625);
+const PROFILS = headersOf('Participants');
+const ANNONCES = headersOf('Annonces');
+const MESSAGES = headersOf('Messages');
+
+check('un onglet se reconnait a lui-meme', scoreHeaders(PROFILS, PROFILS), 1);
+
+/*
+ * La paire a risque du classeur : Annonces et Messages tiennent tous deux un
+ * identifiant, un horodateur, un auteur, son email, son role, un message, un
+ * indicateur de retrait et une colonne de reactions. Huit colonnes communes
+ * sur les onze attendues pour Annonces : au-dessus d'un seuil naif, ce qui
+ * justifie le seuil d'acceptation eleve (0,85) cote serveur. Sans lui, une
+ * lecture des annonces pourrait rendre le fil des messages.
+ */
+check('recouvrement mesure entre Annonces et Messages', scoreHeaders(MESSAGES, ANNONCES), 8 / 11);
 check(
   'ce recouvrement reste sous le seuil d acceptation par le nom',
-  scoreHeaders(PARTICIPANTS, USERS) < 0.85,
+  scoreHeaders(MESSAGES, ANNONCES) < 0.85,
   true,
 );
 check(
   'le bon onglet devance toujours les autres',
-  scoreHeaders(USERS, USERS) > scoreHeaders(PARTICIPANTS, USERS),
+  scoreHeaders(ANNONCES, ANNONCES) > scoreHeaders(MESSAGES, ANNONCES),
   true,
 );
 check(
-  'Utilisateurs ne passe pas pour Participants',
-  scoreHeaders(USERS, PARTICIPANTS) < 0.6,
+  'et le classement tranche dans l autre sens aussi',
+  scoreHeaders(MESSAGES, MESSAGES) > scoreHeaders(ANNONCES, MESSAGES),
   true,
 );
 check('accents et casse ignores', scoreHeaders(['EMAIL', 'Rôle'], ['email', 'role']), 1);
-check('colonnes absentes', scoreHeaders([], USERS), 0);
-check('attente vide', scoreHeaders(USERS, []), 0);
+check('colonnes absentes', scoreHeaders([], PROFILS), 0);
+check('attente vide', scoreHeaders(PROFILS, []), 0);
 
-// Le cas reel qui a motive la correction : le classeur renvoyait l onglet
-// Participants alors que l application demandait Utilisateurs.
-// Cas reel : le classeur renvoyait l onglet Participants alors que
-// l application demandait Utilisateurs. Le classement doit trancher.
+/*
+ * Cas reel qui a motive la correction : le classeur renvoyait son premier
+ * onglet, alors nomme Participants, quand l application demandait
+ * Utilisateurs. Les deux onglets sont depuis fusionnes, mais le classement
+ * doit continuer a trancher entre deux tables qui se ressemblent.
+ */
 const ONGLET_RENVOYE = ['ID', 'Billet', 'Nom', 'Email', 'Role', 'Institution', 'Poste', 'Pays', 'Ville', 'Interets'];
-const ONGLET_ATTENDU = ['Email', 'Nom', 'Role', 'Statut', 'Mot de passe', 'Institution', 'Poste', 'Attribue par'];
 
 check(
-  'l onglet renvoye par erreur n est pas accepte sur son nom',
-  scoreHeaders(ONGLET_RENVOYE, USERS) < 0.85,
+  'un onglet incomplet n est pas accepte sur son nom',
+  scoreHeaders(ONGLET_RENVOYE, PROFILS) < 0.85,
   true,
 );
 check(
-  'et le vrai onglet Utilisateurs le devance',
-  scoreHeaders(ONGLET_ATTENDU, USERS) > scoreHeaders(ONGLET_RENVOYE, USERS),
+  'et l onglet complet le devance',
+  scoreHeaders(PROFILS, PROFILS) > scoreHeaders(ONGLET_RENVOYE, PROFILS),
+  true,
+);
+check(
+  'le programme ne peut pas passer pour l annuaire',
+  scoreHeaders(headersOf('Sessions'), PROFILS) < 0.5,
   true,
 );
 console.log(`\n=== ${passed} reussis, ${failed} echoues ===`);

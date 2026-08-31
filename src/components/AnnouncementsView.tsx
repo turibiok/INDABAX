@@ -1,33 +1,39 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Bell, 
-  Pin, 
-  Heart, 
-  MessageSquare, 
-  Send, 
-  Plus, 
-  X, 
-  AlertCircle, 
-  Calendar, 
-  Truck, 
-  Sparkles, 
-  Trophy, 
-  Users, 
-  ShieldAlert, 
+import {
+  Bell,
+  Pin,
+  Heart,
+  MessageSquare,
+  Send,
+  Plus,
+  X,
+  AlertCircle,
+  Calendar,
+  Truck,
+  Sparkles,
+  Trophy,
+  Users,
+  ShieldAlert,
   Filter,
   CheckCircle2
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
 import { AnnouncementCategory, Announcement } from '../types';
+import { Avatar } from './Avatar';
+import { RoleBadge } from './RoleBadge';
 
 export const AnnouncementsView: React.FC = () => {
-  const { 
-    announcements, 
-    currentUser, 
-    likeAnnouncement, 
-    addAnnouncementComment, 
-    addAnnouncement 
+  const {
+    announcements,
+    currentUser,
+    capabilities,
+    socialWarning,
+    likeAnnouncement,
+    addAnnouncementComment,
+    addAnnouncement,
+    deleteAnnouncement,
+    togglePinAnnouncement
   } = useEvent();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -43,7 +49,16 @@ export const AnnouncementsView: React.FC = () => {
   const [newPinned, setNewPinned] = useState(false);
   const [newAudience, setNewAudience] = useState<'all' | 'speakers' | 'volunteers' | 'attendees'>('all');
 
-  const canPublish = currentUser.role === 'organizer' || currentUser.role === 'speaker' || currentUser.role === 'volunteer';
+  /*
+   * Le droit de publier vient du serveur, pas d'une liste de rôles tenue ici.
+   *
+   * Cette liste était fausse dans les deux sens : elle cachait le bouton aux
+   * Super-Admins, qui ont le droit de diffuser, et le montrait aux
+   * conférenciers et volontaires, dont la publication était refusée par le
+   * serveur. Un bouton qui mène à un refus est pire que pas de bouton.
+   */
+  const canPublish = capabilities.canBroadcast;
+  const canModerate = capabilities.canManageContent;
 
   const categories = [
     { key: 'ALL', label: 'Toutes', icon: Bell },
@@ -112,18 +127,6 @@ export const AnnouncementsView: React.FC = () => {
     }
   };
 
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'organizer':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500 text-white">Organisateur</span>;
-      case 'speaker':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-600 text-white">Conférencier</span>;
-      case 'volunteer':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-600 text-white">Volontaire</span>;
-      default:
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-stone-200 text-stone-700">Membre</span>;
-    }
-  };
 
   return (
     <div id="announcements-container" className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -167,8 +170,8 @@ export const AnnouncementsView: React.FC = () => {
                 key={cat.key}
                 onClick={() => setSelectedCategory(cat.key)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                  isSelected 
-                    ? 'bg-white text-stone-900 shadow-xs font-semibold' 
+                  isSelected
+                    ? 'bg-white text-stone-900 shadow-xs font-semibold'
                     : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
                 }`}
               >
@@ -179,6 +182,18 @@ export const AnnouncementsView: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/*
+        Les annonces viennent du classeur : quand il est illisible ou qu'aucune
+        voie d'écriture n'est configurée, il faut le dire ici plutôt que de
+        laisser croire à une liste complète.
+      */}
+      {socialWarning && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 text-xs leading-relaxed">
+          <Bell size={14} className="mt-0.5 shrink-0" />
+          <span>{socialWarning}</span>
+        </div>
+      )}
 
       {/* Announcements List */}
       <div className="space-y-4">
@@ -200,10 +215,10 @@ export const AnnouncementsView: React.FC = () => {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs ${
-                  isUrgent 
-                    ? 'border-red-300 ring-2 ring-red-500/10' 
-                    : ann.pinned 
-                    ? 'border-amber-300 bg-amber-50/20' 
+                  isUrgent
+                    ? 'border-red-300 ring-2 ring-red-500/10'
+                    : ann.pinned
+                    ? 'border-amber-300 bg-amber-50/20'
                     : 'border-stone-200/80 hover:border-stone-300'
                 }`}
               >
@@ -211,22 +226,23 @@ export const AnnouncementsView: React.FC = () => {
                 <div className="p-5 md:p-6">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3">
-                      <img 
-                        src={ann.authorAvatar} 
-                        alt={ann.authorName} 
-                        className="w-10 h-10 rounded-full object-cover border border-stone-200 shadow-xs" 
+                      <Avatar
+                        name={ann.authorName}
+                        url={ann.authorAvatar}
+                        size={40}
+                        className="shadow-xs"
                       />
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-stone-900 text-sm">{ann.authorName}</span>
-                          {getRoleBadge(ann.authorRole)}
+                          <RoleBadge role={ann.authorRole} />
                         </div>
                         <span className="text-xs text-stone-400">
-                          {new Date(ann.timestamp).toLocaleDateString('fr-FR', { 
-                            day: 'numeric', 
-                            month: 'short', 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
+                          {new Date(ann.timestamp).toLocaleDateString('fr-FR', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
                           })}
                         </span>
                       </div>
@@ -258,8 +274,8 @@ export const AnnouncementsView: React.FC = () => {
                         id={`btn-like-${ann.id}`}
                         onClick={() => likeAnnouncement(ann.id)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors font-medium ${
-                          isLiked 
-                            ? 'bg-rose-50 text-rose-600' 
+                          isLiked
+                            ? 'bg-rose-50 text-rose-600'
                             : 'hover:bg-stone-100 text-stone-600'
                         }`}
                       >
@@ -278,11 +294,46 @@ export const AnnouncementsView: React.FC = () => {
                       </button>
                     </div>
 
-                    {ann.targetAudience && ann.targetAudience !== 'all' && (
-                      <span className="flex items-center gap-1 text-[11px] text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">
-                        <Users size={12} /> Cible : {ann.targetAudience}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {ann.targetAudience && ann.targetAudience !== 'all' && (
+                        <span className="flex items-center gap-1 text-[11px] text-stone-400 bg-stone-100 px-2 py-0.5 rounded-md">
+                          <Users size={12} /> Cible : {ann.targetAudience}
+                        </span>
+                      )}
+
+                      {/*
+                        Épingler et retirer : réservé aux rôles responsables du
+                        contenu. Le retrait masque l'annonce sans effacer la
+                        ligne du classeur, ce qui garde la trace de ce qui a
+                        été dit pendant l'événement.
+                      */}
+                      {canModerate && (
+                        <>
+                          <button
+                            onClick={() => togglePinAnnouncement(ann.id)}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                              ann.pinned
+                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                : 'text-stone-500 hover:bg-stone-100'
+                            }`}
+                            title={ann.pinned ? 'Ne plus épingler' : 'Épingler en tête'}
+                          >
+                            {ann.pinned ? 'Épinglée' : 'Épingler'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Retirer l'annonce « ${ann.title} » ? Elle disparaîtra de l'application ; sa ligne reste dans le classeur.`)) {
+                                deleteAnnouncement(ann.id);
+                              }
+                            }}
+                            className="px-2 py-1 rounded-lg text-[11px] font-semibold text-stone-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                            title="Retirer cette annonce"
+                          >
+                            Retirer
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -297,10 +348,10 @@ export const AnnouncementsView: React.FC = () => {
                     >
                       {/* Comment Input */}
                       <div className="flex items-center gap-2">
-                        <img 
-                          src={currentUser.avatarUrl} 
-                          alt={currentUser.name} 
-                          className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0" 
+                        <img
+                          src={currentUser.avatarUrl}
+                          alt={currentUser.name}
+                          className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0"
                         />
                         <div className="flex-1 relative">
                           <input
@@ -330,16 +381,17 @@ export const AnnouncementsView: React.FC = () => {
                         <div className="space-y-2.5 pt-2">
                           {ann.comments.map((comm) => (
                             <div key={comm.id} className="flex items-start gap-2.5 bg-white p-3 rounded-xl border border-stone-200/60 shadow-2xs text-xs">
-                              <img 
-                                src={comm.authorAvatar} 
-                                alt={comm.authorName} 
-                                className="w-7 h-7 rounded-full object-cover border border-stone-200 shrink-0" 
+                              <Avatar
+                                name={comm.authorName}
+                                seed={comm.authorId}
+                                url={comm.authorAvatar}
+                                size={28}
                               />
                               <div className="flex-1">
                                 <div className="flex items-center justify-between gap-2 mb-1">
                                   <div className="flex items-center gap-1.5">
                                     <span className="font-semibold text-stone-900">{comm.authorName}</span>
-                                    {getRoleBadge(comm.authorRole)}
+                                    <RoleBadge role={comm.authorRole} />
                                   </div>
                                   <span className="text-[10px] text-stone-400">
                                     {new Date(comm.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}

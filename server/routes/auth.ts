@@ -45,6 +45,7 @@ import {
   sendEmail,
   SheetError,
 } from '../sheetsGateway';
+import { forgetHashInSheet, rememberHashInSheet } from '../profileWriter';
 
 export const authRouter = Router();
 
@@ -115,7 +116,7 @@ async function resolveAccount(email: string): Promise<Resolution> {
 
   if (config.isLinked && config.masterSheetUrl.trim()) {
     try {
-      const table = await readTab(config.usersTab, config, expectedHeadersFor('users'));
+      const table = await readTab(config.profilesTab, config, expectedHeadersFor('profiles'));
       const account = mapUserAccounts(table).find(item => item.email === email);
       if (account) {
         return { account, source: 'sheet', passwordHash: await resolvePasswordHash(account) };
@@ -411,6 +412,10 @@ authRouter.post('/register', async (req: AuthedRequest, res) => {
 
   revokeTokensFor(email);
 
+  // Le classeur est la seule memoire qui survive a un redemarrage : sans ce
+  // retour, la personne devrait se reinscrire a chaque reveil du service.
+  const { warning } = await rememberHashInSheet(email, hash);
+
   const session = createSession({
     email,
     name: account.name,
@@ -425,6 +430,7 @@ authRouter.post('/register', async (req: AuthedRequest, res) => {
     session: toClientSession(session),
     capabilities: capabilitiesFor(session.role),
     profile: toPublicAccount({ ...account, email, passwordHash: hash }),
+    warning,
   });
 });
 
@@ -590,10 +596,13 @@ authRouter.post('/reset', async (req: AuthedRequest, res) => {
   // etait connecte sur ce compte, il perd l'acces.
   revokeSessionsForEmail(entry.email);
 
+  const { warning } = await rememberHashInSheet(entry.email, hash);
+
   res.json({
     ok: true,
     email: entry.email,
     message: 'Mot de passe enregistré. Vous pouvez maintenant vous connecter.',
+    warning,
   });
 });
 
@@ -632,11 +641,15 @@ authRouter.post('/password', requireAuth, async (req: AuthedRequest, res) => {
     });
   }
 
-  setPasswordHash(session.email, await hashPassword(next));
+  const changedHash = await hashPassword(next);
+  setPasswordHash(session.email, changedHash);
+  const { warning: changeWarning } = await rememberHashInSheet(session.email, changedHash);
 
   res.json({
     ok: true,
-    message: 'Mot de passe modifié. Il remplace celui du classeur pour vos prochaines connexions.',
+    message:
+      'Mot de passe modifié. Il servira à vos prochaines connexions.' +
+      (changeWarning ? ` ${changeWarning}` : ''),
   });
 });
 
@@ -690,22 +703,32 @@ authRouter.post('/accounts', requireCapability('canManageRoles'), async (req: Au
  * remplacé. Le compte redevient « à activer », et la personne en choisit un
  * nouveau en s'inscrivant — l'organisateur n'a donc jamais à en connaître un.
  */
-authRouter.post('/accounts/:email/reset-password', requireCapability('canManageRoles'), (req: AuthedRequest, res) => {
-  const email = normalizeEmail(req.params.email);
+authRouter.post(
+  '/accounts/:email/reset-password',
+  requireCapability('canManageRoles'),
+  async (req: AuthedRequest, res) => {
+    const email = normalizeEmail(req.params.email);
 
-  if (!clearPassword(email)) {
-    return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
-  }
+    if (!clearPassword(email)) {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
 
-  // Le compte ne doit plus pouvoir servir avec l'ancien mot de passe.
-  revokeSessionsForEmail(email);
-  revokeTokensFor(email);
+    // Le compte ne doit plus pouvoir servir avec l'ancien mot de passe.
+    revokeSessionsForEmail(email);
+    revokeTokensFor(email);
 
-  res.json({
-    ok: true,
-    message: `Mot de passe de ${email} effacé. La personne doit maintenant s'inscrire pour en choisir un nouveau.`,
-  });
-});
+    // La colonne du classeur doit suivre : une empreinte qui y resterait
+    // ressusciterait l'ancien mot de passe au prochain redemarrage.
+    const { warning } = await forgetHashInSheet(email);
+
+    res.json({
+      ok: true,
+      message:
+        `Mot de passe de ${email} effacé. La personne doit maintenant s'inscrire pour en choisir un nouveau.` +
+        (warning ? ` ${warning}` : ''),
+    });
+  },
+);
 
 authRouter.delete('/accounts/:email', requireCapability('canManageRoles'), (req: AuthedRequest, res) => {
   const email = normalizeEmail(req.params.email);
@@ -724,13 +747,13 @@ authRouter.delete('/accounts/:email', requireCapability('canManageRoles'), (req:
 authRouter.post('/accounts/reload', requireCapability('canManageRoles'), async (_req, res) => {
   try {
     const config = getSheetsConfig();
-    const table = await readTab(config.usersTab, config, expectedHeadersFor('users'));
+    const table = await readTab(config.profilesTab, config, expectedHeadersFor('profiles'));
     const accounts = mapUserAccounts(table);
 
     if (accounts.length === 0) {
       return res.status(422).json({
         error:
-          `Aucune colonne « Email » exploitable dans l'onglet « ${config.usersTab} ». ` +
+          `Aucune colonne « Email » exploitable dans l'onglet « ${config.profilesTab} ». ` +
           `Vérifiez l'orthographe exacte du nom de l'onglet, puis ses colonnes. ` +
           `Colonnes lues : ${table.headers.filter(Boolean).join(', ') || 'aucune'}.`,
         reason: 'no_accounts',

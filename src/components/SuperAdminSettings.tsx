@@ -1547,7 +1547,7 @@ export const SuperAdminSettings: React.FC = () => {
                     {isSheetsLinked ? 'Classeur lié et lisible' : 'Aucun classeur lié — base locale'}
                   </h4>
                   <p className="text-[11px] text-stone-400">
-                    {userAccounts.length} compte(s) en mémoire • onglet des rôles : « {sheetsConfig.usersTab} »
+                    {userAccounts.length} compte(s) en mémoire • onglet des rôles : « {sheetsConfig.profilesTab} »
                     {sheetsConfig.lastSyncTimestamp
                       ? ` • dernière lecture ${new Date(sheetsConfig.lastSyncTimestamp).toLocaleString('fr-FR')}`
                       : ''}

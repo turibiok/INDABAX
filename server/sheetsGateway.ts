@@ -57,14 +57,21 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}) {
  * organisateurs : la reconnaissance d'un onglet et la documentation ne peuvent
  * donc pas divulguer.
  */
-export type TabKind = 'users' | 'participants' | 'sessions' | 'checkins' | 'feedbacks';
+export type TabKind =
+  | 'profiles'
+  | 'sessions'
+  | 'checkins'
+  | 'feedbacks'
+  | 'announcements'
+  | 'messages';
 
 const TEMPLATE_BY_KIND: Record<TabKind, string> = {
-  users: 'Utilisateurs',
-  participants: 'Participants',
+  profiles: 'Participants',
   sessions: 'Sessions',
   checkins: 'Check-ins',
   feedbacks: 'Feedbacks',
+  announcements: 'Annonces',
+  messages: 'Messages',
 };
 
 export function expectedHeadersFor(kind: TabKind): string[] {
@@ -317,10 +324,23 @@ export async function sendEmail(input: {
   return { sent: true };
 }
 
+export interface WriteOptions {
+  /**
+   * Colonne servant de cle. Quand elle est fournie, une ligne dont la cle
+   * existe deja est mise a jour au lieu d'etre ajoutee : c'est ce qui permet
+   * de tenir une seule ligne par personne dans l'onglet des profils.
+   *
+   * Seules les colonnes presentes dans la ligne envoyee sont touchees ; les
+   * autres cellules de la ligne existante sont laissees telles quelles.
+   */
+  keyColumn?: string;
+}
+
 /** Ecrit des lignes dans un onglet, via Apps Script ou l'API AppSheet. */
 export async function writeRows(
   table: string,
   rows: Record<string, unknown>[],
+  options: WriteOptions = {},
 ): Promise<{ via: 'apps-script' | 'appsheet'; written: number }> {
   const config = getSheetsConfig();
 
@@ -351,7 +371,7 @@ export async function writeRows(
     const response = await fetchWithTimeout(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ table, rows }),
+      body: JSON.stringify({ table, rows, keyColumn: options.keyColumn }),
     });
 
     if (!response.ok) {
@@ -427,6 +447,18 @@ export async function writeRows(
   const accessKey = config.appSheetAccessKey.trim();
 
   if (appId && accessKey) {
+    // « Add » ajoute toujours une ligne : l'utiliser pour une mise a jour
+    // dupliquerait la personne au lieu de corriger sa ligne. Mieux vaut
+    // refuser que de laisser deux lignes se contredire.
+    if (options.keyColumn) {
+      throw new SheetError(
+        "La mise à jour d'une ligne existante demande un Apps Script : l'API AppSheet configurée ne " +
+          'sait ici qu’ajouter des lignes. Renseignez l’URL du Apps Script du classeur.',
+        409,
+        'upsert_unsupported',
+      );
+    }
+
     const url = `https://api.appsheet.com/api/v2/apps/${encodeURIComponent(appId)}/tables/${encodeURIComponent(table)}/Action`;
 
     const response = await fetchWithTimeout(url, {

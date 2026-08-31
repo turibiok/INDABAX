@@ -195,11 +195,12 @@ export async function fetchSheetsConfig(): Promise<PublicSheetsConfig> {
 }
 
 export async function saveSheetsConfig(patch: {
-  usersTab?: string;
-  participantsTab?: string;
+  profilesTab?: string;
   sessionsTab?: string;
   checkInsTab?: string;
   feedbacksTab?: string;
+  announcementsTab?: string;
+  messagesTab?: string;
   autoSync?: boolean;
   writeWebhookUrl?: string;
   appSheetAppId?: string;
@@ -214,9 +215,9 @@ export async function saveSheetsConfig(patch: {
 
 export function linkSheet(
   masterSheetUrl: string,
-  usersTab?: string,
+  profilesTab?: string,
 ): Promise<{ config: PublicSheetsConfig; accounts: number; sessionsUpdated: number; message: string }> {
-  return request('/api/sheets/link', { method: 'POST', body: { masterSheetUrl, usersTab } });
+  return request('/api/sheets/link', { method: 'POST', body: { masterSheetUrl, profilesTab } });
 }
 
 export async function unlinkSheet(): Promise<PublicSheetsConfig> {
@@ -266,4 +267,93 @@ export function appendFeedbacks(items: SessionFeedback[]): Promise<{ ok: boolean
       })),
     },
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Annonces, discussions et commentaires
+ * ------------------------------------------------------------------ */
+
+export interface ServerComment {
+  id: string;
+  authorName: string;
+  authorEmail: string;
+  authorRole: ParticipantRole;
+  content: string;
+  timestamp: string;
+}
+
+export interface ServerAnnouncement {
+  id: string;
+  timestamp: string;
+  category: string;
+  title: string;
+  content: string;
+  authorName: string;
+  authorEmail: string;
+  authorRole: ParticipantRole;
+  pinned: boolean;
+  retired: boolean;
+  likes: number;
+  likedByMe: boolean;
+  comments: ServerComment[];
+}
+
+export interface ServerMessage {
+  id: string;
+  timestamp: string;
+  thread: string;
+  authorName: string;
+  authorEmail: string;
+  authorRole: ParticipantRole;
+  content: string;
+}
+
+export async function fetchAnnouncements(): Promise<ServerAnnouncement[]> {
+  const data = await request<{ announcements: ServerAnnouncement[] }>('/api/social/announcements');
+  return data.announcements;
+}
+
+export function publishAnnouncement(input: {
+  title: string;
+  content: string;
+  category: string;
+  pinned?: boolean;
+}): Promise<{ announcement: ServerAnnouncement; warning?: string }> {
+  return request('/api/social/announcements', { method: 'POST', body: input });
+}
+
+export function pinAnnouncement(id: string, pinned: boolean): Promise<{ ok: boolean; warning?: string }> {
+  return request(`/api/social/announcements/${encodeURIComponent(id)}/pin`, {
+    method: 'POST',
+    body: { pinned },
+  });
+}
+
+export function retireAnnouncement(id: string): Promise<{ ok: boolean; warning?: string }> {
+  return request(`/api/social/announcements/${encodeURIComponent(id)}/retire`, { method: 'POST' });
+}
+
+export function likeAnnouncement(
+  id: string,
+): Promise<{ liked: boolean; likes: number; warning?: string }> {
+  return request(`/api/social/announcements/${encodeURIComponent(id)}/like`, { method: 'POST' });
+}
+
+/** Messages d'un fil, ou de tous les fils quand `thread` est absent. */
+export async function fetchMessages(
+  thread?: string,
+): Promise<{ messages: ServerMessage[]; counts: Record<string, number> }> {
+  const query = thread ? `?thread=${encodeURIComponent(thread)}` : '';
+  return request(`/api/social/messages${query}`);
+}
+
+export function sendMessage(
+  thread: string,
+  content: string,
+): Promise<{ message: ServerMessage; warning?: string }> {
+  return request('/api/social/messages', { method: 'POST', body: { thread, content } });
+}
+
+export function retireMessage(id: string): Promise<{ ok: boolean; warning?: string }> {
+  return request(`/api/social/messages/${encodeURIComponent(id)}/retire`, { method: 'POST' });
 }

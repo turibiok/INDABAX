@@ -335,6 +335,14 @@ export function normalizeEmail(email: string): string {
  * Mot de passe / Password / Code, etc. Le mot de passe ainsi lu est en clair :
  * il est destine a etre hache immediatement par le serveur.
  */
+/**
+ * Debut d'une empreinte scrypt, tel que le produit `hashPassword`.
+ *
+ * C'est ce qui permet de tenir le secret dans une seule colonne : ce qui
+ * commence ainsi est deja hache, le reste est un mot de passe en clair.
+ */
+export const HASH_PREFIX = 'scrypt$';
+
 export function mapUserAccount(row: Record<string, string>): UserAccount | null {
   const email = normalizeEmail(
     pick(row, 'email', 'adresse email', 'mail', 'e-mail', 'courriel'),
@@ -345,14 +353,32 @@ export function mapUserAccount(row: Record<string, string>): UserAccount | null 
     pick(row, 'name', 'nom', 'nom complet', 'full name', 'prenom nom', 'participant') ||
     email.split('@')[0].replace(/[._-]+/g, ' ');
 
+  // Une seule cellule porte le secret, et son contenu se reconnait de
+  // lui-meme : une empreinte commence par « scrypt$ », tout le reste est un
+  // mot de passe en clair qu'un organisateur a saisi avant la fusion. Le
+  // serveur le hache des sa lecture et remplace la cellule par l'empreinte,
+  // ce qui fait disparaitre le mot de passe en clair du classeur.
+  const secret = pick(
+    row,
+    'empreinte',
+    'hash',
+    'mot de passe',
+    'password',
+    'motdepasse',
+    'code',
+    'code acces',
+    "code d'acces",
+    'pin',
+  );
+  const looksHashed = secret.startsWith(HASH_PREFIX);
+
   return {
     email,
     name,
     role: parseRole(pick(row, 'role', 'profil', 'fonction', 'type', 'categorie')),
     status: parseStatus(pick(row, 'status', 'statut', 'etat', 'actif', 'validation')),
-    password:
-      pick(row, 'mot de passe', 'password', 'motdepasse', 'code', 'code acces', "code d'acces", 'pin') ||
-      undefined,
+    password: looksHashed ? undefined : secret || undefined,
+    passwordHash: looksHashed ? secret : undefined,
     institution:
       pick(row, 'institution', 'organisation', 'structure', 'entreprise', 'universite', 'affiliation') ||
       undefined,
@@ -361,7 +387,26 @@ export function mapUserAccount(row: Record<string, string>): UserAccount | null 
     avatarUrl: pick(row, 'avatar', 'avatar url', 'photo', 'photo url', 'image') || undefined,
     assignedBy: pick(row, 'assigned by', 'attribue par', 'admin') || undefined,
     assignedAt: pick(row, 'assigned at', 'date attribution', 'horodateur', 'timestamp') || undefined,
+    country: pick(row, 'pays', 'country') || undefined,
+    city: pick(row, 'ville', 'city') || undefined,
+    bio: pick(row, 'bio', 'biographie', 'presentation', 'a propos') || undefined,
+    phone: pick(row, 'telephone', 'phone', 'tel', 'whatsapp') || undefined,
+    linkedin: pick(row, 'linkedin', 'linked in', 'profil linkedin', 'reseau') || undefined,
+    interests: splitList(
+      pick(row, 'interets', "centres d'interet", 'interests', 'tags', 'thematiques'),
+    ),
   };
+}
+
+/**
+ * Decoupe une liste saisie a la main. Les organisateurs separent selon leur
+ * habitude : point-virgule, virgule ou barre verticale sont tous acceptes.
+ */
+export function splitList(value: string): string[] {
+  return value
+    .split(/[;,|]/)
+    .map(item => item.trim())
+    .filter(Boolean);
 }
 
 /** Convertit toute une table en liste de comptes (les lignes invalides sont ignorees). */

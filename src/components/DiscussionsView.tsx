@@ -1,21 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  MessageSquare, 
-  Send, 
-  Smile, 
-  Paperclip, 
-  Search, 
-  Hash, 
-  Users, 
-  Sparkles, 
-  Languages, 
-  Camera, 
-  Briefcase, 
-  Trophy, 
-  Car, 
-  UserCheck, 
-  ChevronRight, 
+import {
+  MessageSquare,
+  Send,
+  Smile,
+  Paperclip,
+  Search,
+  Hash,
+  Users,
+  Sparkles,
+  Languages,
+  Camera,
+  Briefcase,
+  Trophy,
+  Car,
+  UserCheck,
+  ChevronRight,
   ExternalLink,
   AtSign,
   Shield,
@@ -23,20 +23,22 @@ import {
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
 import { ChatMessage, Participant } from '../types';
+import { Avatar } from './Avatar';
+import { RoleBadge } from './RoleBadge';
 
 export const DiscussionsView: React.FC = () => {
-  const { 
-    currentUser, 
-    channels, 
-    chatMessages, 
-    participants, 
-    activeChannelId, 
-    setActiveChannelId, 
-    activeDirectPartnerId, 
-    setActiveDirectPartnerId, 
-    sendChannelMessage, 
-    sendDirectMessage, 
-    reactToMessage 
+  const {
+    currentUser,
+    channels,
+    chatMessages,
+    participants,
+    activeChannelId,
+    setActiveChannelId,
+    activeDirectPartnerId,
+    setActiveDirectPartnerId,
+    sendChannelMessage,
+    sendDirectMessage,
+    reactToMessage
   } = useEvent();
 
   const [messageText, setMessageText] = useState('');
@@ -62,8 +64,8 @@ export const DiscussionsView: React.FC = () => {
   const activePartner = participants.find(p => p.id === activeDirectPartnerId);
 
   // Current active conversation ID for Direct Message
-  const currentDmId = (activePartner && currentUser) 
-    ? `dm_${[currentUser.id, activePartner.id].sort().join('_')}` 
+  const currentDmId = (activePartner && currentUser)
+    ? `dm_${[currentUser.id, activePartner.id].sort().join('_')}`
     : '';
 
   // Filter messages based on active mode
@@ -83,10 +85,9 @@ export const DiscussionsView: React.FC = () => {
       sendDirectMessage(activePartner.id, messageText.trim());
     } else {
       sendChannelMessage(
-        activeChannelId, 
-        messageText.trim(), 
+        activeChannelId,
+        messageText.trim(),
         attachmentUrl.trim() ? attachmentUrl.trim() : undefined,
-        attachmentUrl.trim() ? 'link' : undefined
       );
     }
 
@@ -116,20 +117,8 @@ export const DiscussionsView: React.FC = () => {
     }
   };
 
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'organizer':
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-500 text-white">Org</span>;
-      case 'speaker':
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-indigo-600 text-white">Speaker</span>;
-      case 'volunteer':
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-emerald-600 text-white">Volontaire</span>;
-      default:
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-stone-200 text-stone-700">Membre</span>;
-    }
-  };
 
-  const filteredMembers = participants.filter(p => 
+  const filteredMembers = participants.filter(p =>
     p.id !== currentUser.id && (
       p.name.toLowerCase().includes(searchMemberQuery.toLowerCase()) ||
       p.institution.toLowerCase().includes(searchMemberQuery.toLowerCase()) ||
@@ -163,8 +152,8 @@ export const DiscussionsView: React.FC = () => {
             <span>Salons Publics</span>
           </button>
           <button
-            onClick={() => { 
-              setIsDirectMode(true); 
+            onClick={() => {
+              setIsDirectMode(true);
               if (!activeDirectPartnerId && participants.length > 1) {
                 const partner = participants.find(p => p.id !== currentUser.id);
                 if (partner) setActiveDirectPartnerId(partner.id);
@@ -201,8 +190,8 @@ export const DiscussionsView: React.FC = () => {
                       setActiveDirectPartnerId(null);
                     }}
                     className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-all ${
-                      isActive 
-                        ? 'bg-amber-500 text-white font-semibold shadow-xs' 
+                      isActive
+                        ? 'bg-amber-500 text-white font-semibold shadow-xs'
                         : 'text-stone-700 hover:bg-stone-200/60 font-medium'
                     }`}
                   >
@@ -248,23 +237,23 @@ export const DiscussionsView: React.FC = () => {
                         setIsDirectMode(true);
                       }}
                       className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-left text-xs transition-all ${
-                        isSelected 
-                          ? 'bg-amber-500 text-white font-semibold shadow-xs' 
+                        isSelected
+                          ? 'bg-amber-500 text-white font-semibold shadow-xs'
                           : 'text-stone-700 hover:bg-stone-200/60'
                       }`}
                     >
                       <div className="relative">
-                        <img 
-                          src={member.avatarUrl} 
-                          alt={member.name} 
-                          className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0" 
+                        <img
+                          src={member.avatarUrl}
+                          alt={member.name}
+                          className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0"
                         />
                         <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
                       </div>
                       <div className="flex-1 truncate">
                         <div className="flex items-center justify-between gap-1">
                           <span className="truncate font-semibold">{member.name}</span>
-                          {getRoleBadge(member.role)}
+                          <RoleBadge role={member.role} />
                         </div>
                         <span className={`text-[10px] truncate block ${isSelected ? 'text-amber-100' : 'text-stone-400'}`}>
                           {member.position} • {member.institution}
@@ -280,17 +269,17 @@ export const DiscussionsView: React.FC = () => {
           {/* Current User Pill */}
           <div className="p-3 border-t border-stone-200/70 bg-stone-100/60 flex items-center justify-between">
             <div className="flex items-center gap-2 truncate">
-              <img 
-                src={currentUser.avatarUrl} 
-                alt={currentUser.name} 
-                className="w-7 h-7 rounded-full object-cover border border-stone-300" 
+              <img
+                src={currentUser.avatarUrl}
+                alt={currentUser.name}
+                className="w-7 h-7 rounded-full object-cover border border-stone-300"
               />
               <div className="truncate text-xs">
                 <p className="font-semibold text-stone-900 truncate leading-tight">{currentUser.name}</p>
                 <p className="text-[10px] text-stone-500 truncate">{currentUser.email}</p>
               </div>
             </div>
-            {getRoleBadge(currentUser.role)}
+            <RoleBadge role={currentUser.role} />
           </div>
         </div>
 
@@ -314,15 +303,15 @@ export const DiscussionsView: React.FC = () => {
             ) : activePartner ? (
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-2.5">
-                  <img 
-                    src={activePartner.avatarUrl} 
-                    alt={activePartner.name} 
-                    className="w-9 h-9 rounded-full object-cover border border-stone-200" 
+                  <img
+                    src={activePartner.avatarUrl}
+                    alt={activePartner.name}
+                    className="w-9 h-9 rounded-full object-cover border border-stone-200"
                   />
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="font-bold text-stone-900 text-sm">{activePartner.name}</h2>
-                      {getRoleBadge(activePartner.role)}
+                      <RoleBadge role={activePartner.role} />
                     </div>
                     <p className="text-xs text-stone-500 truncate">
                       {activePartner.position} • {activePartner.institution} ({activePartner.city})
@@ -371,16 +360,18 @@ export const DiscussionsView: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className={`flex items-start gap-2.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}
                   >
-                    <img 
-                      src={msg.senderAvatar} 
-                      alt={msg.senderName} 
-                      className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0 mt-0.5" 
+                    <Avatar
+                      name={msg.senderName}
+                      seed={msg.senderId}
+                      url={msg.senderAvatar}
+                      size={32}
+                      className="mt-0.5"
                     />
 
                     <div className={`max-w-[78%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                       <div className="flex items-center gap-1.5 mb-1 px-1">
                         <span className="text-[11px] font-semibold text-stone-800">{msg.senderName}</span>
-                        {getRoleBadge(msg.senderRole)}
+                        <RoleBadge role={msg.senderRole} />
                         <span className="text-[10px] text-stone-400">
                           {new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
@@ -388,8 +379,8 @@ export const DiscussionsView: React.FC = () => {
 
                       {/* Bubble */}
                       <div className={`p-3 rounded-2xl text-xs leading-relaxed shadow-2xs ${
-                        isMe 
-                          ? 'bg-amber-600 text-white rounded-tr-xs' 
+                        isMe
+                          ? 'bg-amber-600 text-white rounded-tr-xs'
                           : 'bg-white text-stone-800 border border-stone-200/80 rounded-tl-xs'
                       }`}>
                         <p className="whitespace-pre-line">{msg.content}</p>
@@ -400,10 +391,10 @@ export const DiscussionsView: React.FC = () => {
                             isMe ? 'border-amber-500/60 text-amber-100' : 'border-stone-100 text-amber-700'
                           }`}>
                             <ExternalLink size={13} />
-                            <a 
-                              href={msg.attachmentUrl} 
-                              target="_blank" 
-                              rel="noreferrer" 
+                            <a
+                              href={msg.attachmentUrl}
+                              target="_blank"
+                              rel="noreferrer"
                               className="font-medium underline truncate hover:opacity-80"
                             >
                               {msg.attachmentUrl}
@@ -422,8 +413,8 @@ export const DiscussionsView: React.FC = () => {
                               key={emoji}
                               onClick={() => reactToMessage(msg.id, emoji)}
                               className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] transition-colors border ${
-                                hasReacted 
-                                  ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' 
+                                hasReacted
+                                  ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold'
                                   : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
                               }`}
                             >
@@ -466,7 +457,7 @@ export const DiscussionsView: React.FC = () => {
                   onChange={(e) => setAttachmentUrl(e.target.value)}
                   className="flex-1 text-xs bg-transparent focus:outline-hidden"
                 />
-                <button 
+                <button
                   onClick={() => setShowAttachmentInput(false)}
                   className="text-stone-400 hover:text-stone-600 text-xs px-1"
                 >
@@ -490,8 +481,8 @@ export const DiscussionsView: React.FC = () => {
               <input
                 type="text"
                 placeholder={
-                  isDirectMode && activePartner 
-                    ? `Message privé à ${activePartner.name}...` 
+                  isDirectMode && activePartner
+                    ? `Message privé à ${activePartner.name}...`
                     : `Message dans #${activeChannel.slug}...`
                 }
                 value={messageText}

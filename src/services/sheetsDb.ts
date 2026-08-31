@@ -255,14 +255,61 @@ function doPost(e) {
     ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
     : [];
 
+  /** Retrouve une colonne par son en-tête, à la tolérance près. */
+  function columnIndex(wanted) {
+    var target = normalize(wanted);
+    for (var i = 0; i < headers.length; i++) {
+      if (normalize(headers[i]) === target) return i;
+    }
+    return -1;
+  }
+
+  // Colonne clé : quand elle est fournie, une ligne dont la clé existe déjà
+  // est corrigée sur place au lieu d'être ajoutée. C'est ce qui garde une
+  // seule ligne par personne dans l'onglet des participants.
+  var keyIndex = payload.keyColumn ? columnIndex(payload.keyColumn) : -1;
+  var existing = {};
+
+  if (keyIndex >= 0 && sheet.getLastRow() > 1) {
+    var keys = sheet.getRange(2, keyIndex + 1, sheet.getLastRow() - 1, 1).getValues();
+    for (var k = 0; k < keys.length; k++) {
+      var value = String(keys[k][0]).trim().toLowerCase();
+      // La première ligne trouvée gagne : un doublon éventuel n'est pas touché.
+      if (value && existing[value] === undefined) existing[value] = k + 2;
+    }
+  }
+
+  var added = 0;
+  var updated = 0;
+
   payload.rows.forEach(function (row) {
     if (headers.length === 0) {
       headers = Object.keys(row);
       sheet.appendRow(headers);
+      if (payload.keyColumn) keyIndex = columnIndex(payload.keyColumn);
     }
+
+    var key = keyIndex >= 0 && row[headers[keyIndex]] !== undefined
+      ? String(row[headers[keyIndex]]).trim().toLowerCase()
+      : '';
+    var line = key ? existing[key] : undefined;
+
+    if (line) {
+      // Mise à jour : seules les colonnes présentes dans la ligne envoyée
+      // sont touchées. Le reste du profil, saisi à la main, est préservé.
+      for (var c = 0; c < headers.length; c++) {
+        if (row[headers[c]] === undefined) continue;
+        sheet.getRange(line, c + 1).setValue(row[headers[c]]);
+      }
+      updated++;
+      return;
+    }
+
     sheet.appendRow(headers.map(function (header) {
       return row[header] !== undefined ? row[header] : '';
     }));
+    if (key) existing[key] = sheet.getLastRow();
+    added++;
   });
 
   // Le nom réel de l'onglet est renvoyé : l'application peut ainsi signaler
@@ -271,6 +318,8 @@ function doPost(e) {
     .createTextOutput(JSON.stringify({
       ok: true,
       written: payload.rows.length,
+      added: added,
+      updated: updated,
       sheet: sheet.getName(),
       created: created
     }))

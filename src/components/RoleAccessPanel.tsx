@@ -135,7 +135,7 @@ export const RoleAccessPanel: React.FC = () => {
             <p className="text-xs text-stone-300 mt-1.5 max-w-xl leading-relaxed">
               Chaque email reçoit un rôle, et ce rôle détermine l&apos;interface obtenue à la connexion. Le rôle est
               vérifié par le serveur à chaque requête, jamais par le navigateur. La source de vérité est
-              l&apos;onglet «&nbsp;{sheetsConfig.usersTab}&nbsp;» du classeur Google Sheet.
+              l&apos;onglet «&nbsp;{sheetsConfig.profilesTab}&nbsp;» du classeur Google Sheet.
             </p>
           </div>
 

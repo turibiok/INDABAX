@@ -442,7 +442,7 @@ export const LoginView: React.FC = () => {
                 <span className={`w-2 h-2 rounded-full ${isSheetsLinked ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 <span className="font-bold text-stone-700 dark:text-stone-300">
                   {isSheetsLinked
-                    ? `Base liée • onglet « ${sheetsConfig.usersTab} »`
+                    ? `Base liée • onglet « ${sheetsConfig.profilesTab} »`
                     : 'Aucun classeur lié — table locale du serveur'}
                 </span>
               </div>
