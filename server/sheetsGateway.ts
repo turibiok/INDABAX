@@ -127,6 +127,15 @@ export async function writeRows(
       );
     }
 
+    if (webhookUrl.includes('/dev')) {
+      throw new SheetError(
+        "L'URL du Apps Script se termine par « /dev », qui n'est accessible qu'à son auteur connecté. " +
+          'Déployez le script en « Application web » et utilisez l’URL en « /exec ».',
+        400,
+        'dev_url',
+      );
+    }
+
     const response = await fetchWithTimeout(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -137,7 +146,48 @@ export async function writeRows(
       throw new SheetError(`Le Apps Script a répondu HTTP ${response.status}.`, 502, 'webhook_error');
     }
 
-    return { via: 'apps-script', written: rows.length };
+    // Le code HTTP ne suffit pas. Un déploiement qui n'est pas accessible à
+    // « Tout le monde » redirige vers la page de connexion Google, laquelle
+    // répond 200 avec du HTML : sans cette vérification, l'application
+    // annoncerait une écriture réussie alors que rien n'a été écrit.
+    const body = await response.text();
+    const head = body.trimStart().slice(0, 200).toLowerCase();
+
+    if (head.startsWith('<!doctype html') || head.startsWith('<html')) {
+      const looksLikeLogin = /accounts\.google\.com|connexion|sign in|authorization/i.test(body.slice(0, 4000));
+
+      throw new SheetError(
+        looksLikeLogin
+          ? "Le Apps Script a renvoyé une page de connexion Google : le déploiement n'est pas accessible à " +
+            '« Tout le monde ». Ouvrez le script, puis Déployer › Gérer les déploiements › modifier, et réglez ' +
+            '« Qui a accès » sur « Tout le monde ».'
+          : "Le Apps Script a renvoyé une page HTML au lieu de sa réponse JSON : vérifiez que le script déployé " +
+            'est bien celui fourni par l’application.',
+        502,
+        'webhook_not_public',
+      );
+    }
+
+    let parsed: { ok?: boolean; written?: number; error?: string } | null = null;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      throw new SheetError(
+        `Le Apps Script a renvoyé une réponse illisible : ${body.slice(0, 200)}`,
+        502,
+        'webhook_bad_response',
+      );
+    }
+
+    if (!parsed || parsed.ok !== true) {
+      throw new SheetError(
+        `Le Apps Script a signalé un échec : ${parsed?.error || body.slice(0, 200)}`,
+        502,
+        'webhook_error',
+      );
+    }
+
+    return { via: 'apps-script', written: parsed.written ?? rows.length };
   }
 
   // Voie 2 : API AppSheet.

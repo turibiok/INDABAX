@@ -362,17 +362,31 @@ export function removeAccount(email: string): boolean {
  */
 export async function replaceAccounts(incoming: UserAccount[]): Promise<number> {
   const merged: UserAccount[] = [];
+  const seen = new Set<string>();
 
   for (const account of incoming) {
     const email = normalizeEmail(account.email);
     const existing = findAccount(email);
     const { password, ...rest } = account;
 
+    seen.add(email);
     merged.push({
       ...rest,
       email,
       passwordHash: password ? await hashPassword(password) : existing?.passwordHash,
     });
+  }
+
+  // Le compte administrateur décrit par l'environnement survit au remplacement.
+  //
+  // Sans cela, lier un classeur qui ne contient pas cet email l'effacerait de
+  // la table, et la personne qui vient de configurer l'application perdrait
+  // son accès au rechargement suivant — précisément au moment où elle en a le
+  // plus besoin.
+  const provisionedEmail = normalizeEmail(process.env.SUPERADMIN_EMAIL || '');
+  if (provisionedEmail && !seen.has(provisionedEmail)) {
+    const provisioned = findAccount(provisionedEmail);
+    if (provisioned) merged.push(provisioned);
   }
 
   state.accounts = merged;
