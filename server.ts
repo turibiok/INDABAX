@@ -5,7 +5,15 @@ import dotenv from "dotenv";
 import { authRouter } from "./server/routes/auth";
 import { sheetsRouter } from "./server/routes/sheets";
 import { aiRouter } from "./server/routes/ai";
-import { ensureSuperAdmin, getBootstrapAdminEmails, getSheetsConfig, initStore } from "./server/store";
+import {
+  ensureSuperAdmin,
+  getBootstrapAdminEmails,
+  getSheetsConfig,
+  initStore,
+  verifyConfiguredSheet,
+} from "./server/store";
+import { mapUserAccounts } from "./src/lib/sheets";
+import { readTab } from "./server/sheetsGateway";
 import { isCookieSecure, sessionCount, startSessionSweeper } from "./server/sessions";
 
 dotenv.config();
@@ -78,12 +86,28 @@ async function startServer() {
     console.log("Cookie de session : HttpOnly + Secure (HTTPS requis).");
   }
 
+  // Un classeur configuré mais non encore vérifié est testé maintenant : après
+  // un déploiement sur un hébergement sans disque persistant, l'application se
+  // reconfigure ainsi d'elle-même, sans passage obligé par l'interface.
   const sheets = getSheetsConfig();
-  console.log(
-    sheets.isLinked
-      ? `Classeur Google Sheet lié, onglet des comptes « ${sheets.usersTab} ».`
-      : "Aucun classeur lié : connectez-vous puis renseignez le lien dans l'espace Super-Admin.",
-  );
+
+  if (sheets.masterSheetUrl.trim() && !sheets.isLinked) {
+    const result = await verifyConfiguredSheet(async () =>
+      mapUserAccounts(await readTab(getSheetsConfig().usersTab)),
+    );
+
+    console.log(
+      result.linked
+        ? `Classeur Google Sheet lié : ${result.accounts} compte(s) chargé(s) depuis l'onglet « ${sheets.usersTab} ».`
+        : `Classeur configuré mais illisible : ${result.error}`,
+    );
+  } else {
+    console.log(
+      sheets.isLinked
+        ? `Classeur Google Sheet lié, onglet des comptes « ${sheets.usersTab} ».`
+        : "Aucun classeur lié : connectez-vous puis renseignez le lien dans l'espace Super-Admin.",
+    );
+  }
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

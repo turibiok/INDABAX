@@ -107,10 +107,108 @@ export async function initStore() {
     );
   }
 
+  applyEnvSheetConfig();
+
   console.log(
     `État serveur chargé : classeur ${state.sheets.isLinked ? 'lié' : 'non lié'}, ` +
       `${state.accounts.length} compte(s) dans la table du serveur.`,
   );
+}
+
+/**
+ * Applique la configuration du classeur décrite par l'environnement.
+ *
+ * Utile là où le disque n'est pas garanti d'un déploiement à l'autre : sur un
+ * hébergement sans volume persistant, `.data/server-state.json` disparaît et
+ * l'application repartirait sans classeur. Ces variables lui redonnent sa
+ * configuration à chaque démarrage.
+ *
+ * Les valeurs déjà enregistrées gagnent : une modification faite depuis
+ * l'application n'est jamais écrasée par l'environnement. C'est donc un
+ * réglage initial, pas une contrainte permanente.
+ */
+function applyEnvSheetConfig() {
+  const patch: Partial<ServerSheetsConfig> = {};
+
+  const url = (process.env.SHEET_URL || '').trim();
+  if (url && !state.sheets.masterSheetUrl.trim()) {
+    patch.masterSheetUrl = url;
+  }
+
+  const tabs: [keyof ServerSheetsConfig, string | undefined][] = [
+    ['usersTab', process.env.SHEET_USERS_TAB],
+    ['participantsTab', process.env.SHEET_PARTICIPANTS_TAB],
+    ['sessionsTab', process.env.SHEET_SESSIONS_TAB],
+    ['checkInsTab', process.env.SHEET_CHECKINS_TAB],
+    ['feedbacksTab', process.env.SHEET_FEEDBACKS_TAB],
+  ];
+
+  for (const [field, value] of tabs) {
+    if (value && value.trim()) patch[field] = value.trim() as never;
+  }
+
+  // Secrets d'écriture : appliqués seulement si rien n'est encore enregistré.
+  const webhook = (process.env.APPS_SCRIPT_URL || '').trim();
+  if (webhook && !state.sheets.writeWebhookUrl.trim()) {
+    patch.writeWebhookUrl = webhook;
+  }
+
+  const appId = (process.env.APPSHEET_APP_ID || '').trim();
+  const accessKey = (process.env.APPSHEET_ACCESS_KEY || '').trim();
+  if (appId && accessKey && !state.sheets.appSheetAppId.trim()) {
+    patch.appSheetAppId = appId;
+    patch.appSheetAccessKey = accessKey;
+  }
+
+  if (Object.keys(patch).length === 0) return;
+
+  state.sheets = { ...state.sheets, ...patch };
+  writeStateToDisk();
+
+  console.log(
+    `Configuration du classeur appliquée depuis l'environnement : ${Object.keys(patch).join(', ')}.`,
+  );
+}
+
+/**
+ * Vérifie le classeur configuré et charge ses comptes.
+ *
+ * Appelé au démarrage quand une URL est présente mais que la liaison n'est pas
+ * encore confirmée : l'application se configure ainsi toute seule après un
+ * déploiement, sans passage obligé par l'interface.
+ */
+export async function verifyConfiguredSheet(
+  readUsers: () => Promise<UserAccount[]>,
+): Promise<{ linked: boolean; accounts: number; error?: string }> {
+  if (!state.sheets.masterSheetUrl.trim()) {
+    return { linked: false, accounts: 0 };
+  }
+
+  try {
+    const accounts = await readUsers();
+
+    if (accounts.length === 0) {
+      const error = `L'onglet « ${state.sheets.usersTab} » ne contient aucun email exploitable.`;
+      state.sheets = { ...state.sheets, isLinked: false, lastError: error };
+      writeStateToDisk();
+      return { linked: false, accounts: 0, error };
+    }
+
+    await replaceAccounts(accounts);
+    state.sheets = {
+      ...state.sheets,
+      isLinked: true,
+      lastSyncTimestamp: new Date().toISOString(),
+      lastError: undefined,
+    };
+    writeStateToDisk();
+
+    return { linked: true, accounts: accounts.length };
+  } catch (error: any) {
+    state.sheets = { ...state.sheets, isLinked: false, lastError: error.message };
+    writeStateToDisk();
+    return { linked: false, accounts: 0, error: error.message };
+  }
 }
 
 /* ------------------------------------------------------------------ *
