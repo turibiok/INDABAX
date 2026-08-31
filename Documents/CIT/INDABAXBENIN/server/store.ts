@@ -302,6 +302,43 @@ export async function resolvePasswordHash(account: UserAccount): Promise<string 
   return existing?.passwordHash;
 }
 
+/**
+ * Cree le compte super-admin decrit par SUPERADMIN_EMAIL et SUPERADMIN_PASSWORD
+ * s'il n'existe pas encore.
+ *
+ * L'operation est idempotente et ne touche jamais un compte deja present : un
+ * mot de passe change depuis l'application n'est donc pas ecrase au
+ * redemarrage. Pour le reinitialiser, retirez le compte puis redemarrez, ou
+ * utilisez la reinitialisation depuis l'espace Super-Admin.
+ */
+export async function ensureSuperAdmin(): Promise<
+  { created: false; reason: 'not_configured' | 'already_exists' } | { created: true; email: string }
+> {
+  const email = normalizeEmail(process.env.SUPERADMIN_EMAIL || '');
+  const password = process.env.SUPERADMIN_PASSWORD || '';
+
+  if (!email.includes('@') || !password) {
+    return { created: false, reason: 'not_configured' };
+  }
+
+  if (findAccount(email)) {
+    return { created: false, reason: 'already_exists' };
+  }
+
+  const name = (process.env.SUPERADMIN_NAME || email.split('@')[0].replace(/[._-]+/g, ' ')).trim();
+
+  upsertAccount({
+    email,
+    name,
+    role: 'super-admin',
+    status: 'active',
+    passwordHash: await hashPassword(password),
+    assignedBy: 'Provisionnement au démarrage',
+  });
+
+  return { created: true, email };
+}
+
 /* ------------------------------------------------------------------ *
  * Emails administrateurs d'amorcage
  * ------------------------------------------------------------------ */

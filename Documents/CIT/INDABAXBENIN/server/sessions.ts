@@ -14,6 +14,21 @@ import { capabilitiesFor, RoleCapabilities } from '../src/permissions';
 
 export const SESSION_COOKIE = 'indabax_session';
 
+/**
+ * Le drapeau `Secure` empeche le navigateur d'envoyer le cookie hors HTTPS.
+ *
+ * Il est actif par defaut en production, ce qui est le bon reglage. Mais un
+ * deploiement derriere un reverse proxy qui termine TLS, ou une mise en service
+ * provisoire en HTTP, rendrait la connexion silencieusement impossible : le
+ * cookie serait pose puis jamais renvoye. `COOKIE_SECURE=false` permet alors
+ * de lever le drapeau en connaissance de cause.
+ */
+function cookieSecure(): boolean {
+  if (process.env.COOKIE_SECURE === 'false') return false;
+  if (process.env.COOKIE_SECURE === 'true') return true;
+  return process.env.NODE_ENV === 'production';
+}
+
 /** Duree de vie d'une session : une journee d'evenement. */
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -153,7 +168,7 @@ export function setSessionCookie(res: Response, session: ServerSession): void {
   res.cookie(SESSION_COOKIE, session.id, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: cookieSecure(),
     maxAge: SESSION_TTL_MS,
     path: '/',
   });
@@ -163,7 +178,7 @@ export function clearSessionCookie(res: Response): void {
   res.clearCookie(SESSION_COOKIE, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: cookieSecure(),
     path: '/',
   });
 }
@@ -241,4 +256,9 @@ export function startSessionSweeper(intervalMs = 15 * 60 * 1000) {
 
 export function sessionCount(): number {
   return sessions.size;
+}
+
+/** Etat du drapeau Secure, pour l'afficher au demarrage. */
+export function isCookieSecure(): boolean {
+  return cookieSecure();
 }
