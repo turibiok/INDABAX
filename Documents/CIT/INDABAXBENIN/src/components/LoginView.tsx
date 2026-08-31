@@ -68,7 +68,7 @@ export const LoginView: React.FC = () => {
                 INDABAX <span className="text-amber-400">BÉNIN</span>
               </h1>
               <p className="text-emerald-100 text-sm mt-2 font-medium">
-                Deep Learning &amp; IA pour l&apos;Afrique — plateforme inspirée de Baobab.
+                Deep Learning &amp; IA pour l&apos;Afrique de l&apos;Ouest.
               </p>
 
               <p className="text-emerald-200/80 text-xs mt-5 leading-relaxed">

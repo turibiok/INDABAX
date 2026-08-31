@@ -199,7 +199,7 @@ export const VolunteerDashboard: React.FC = () => {
                     <option value="Amphithéâtre Houdégbé (UAC)">Amphi Houdégbé</option>
                     <option value="Lab IA - Salle Turing">Lab IA Turing</option>
                     <option value="Salle des Thèses 1">Salle des Thèses 1</option>
-                    <option value="Hall d'Exposition Baobab">Hall Baobab</option>
+                    <option value={"Hall d'Exposition & Posters"}>Hall d'Exposition</option>
                     <option value="Desk Accueil Extérieur">Desk Accueil</option>
                   </select>
                 </div>

@@ -38,7 +38,7 @@ Le lien du classeur, l'URL du Apps Script et la clé AppSheet sont enregistrés 
 
 | Email | Nom | Role | Statut | Mot de passe | Institution | Poste | Attribue par |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| aline.hounkpe@indabax.bj | Aline Hounkpè | Super-Admin | Actif | Baobab2026! | Comité IndabaX Bénin | Coordinatrice générale | Installation initiale |
+| aline.hounkpe@indabax.bj | Aline Hounkpè | Super-Admin | Actif | Indabax2026! | Comité IndabaX Bénin | Coordinatrice générale | Installation initiale |
 | koffi.dossou@uac.bj | Koffi Emmanuel Dossou | Organisateur | Actif | Cotonou#Prog | Université d'Abomey-Calavi | Responsable programme | Aline Hounkpè |
 | aurelle.tchagna@deeplearningindaba.com | Dr. Aurelle Tchagna | Conférencier | Actif | Keynote-2026 | Deep Learning Indaba | Directrice de recherche IA | Aline Hounkpè |
 | grace.senou@epitech.eu | Grace Senou | Volontaire | Actif | AccueilJ1-77 | Epitech Bénin | Étudiante promo 2027 | Koffi Emmanuel Dossou |
@@ -202,7 +202,7 @@ Collez ces blocs dans un fichier `.csv` puis importez-le dans Google Sheets (**F
 
 ```csv
 Email,Nom,Role,Statut,Mot de passe,Institution,Poste,Attribue par
-aline.hounkpe@indabax.bj,Aline Hounkpè,Super-Admin,Actif,Baobab2026!,Comité IndabaX Bénin,Coordinatrice générale,Installation initiale
+aline.hounkpe@indabax.bj,Aline Hounkpè,Super-Admin,Actif,Indabax2026!,Comité IndabaX Bénin,Coordinatrice générale,Installation initiale
 koffi.dossou@uac.bj,Koffi Emmanuel Dossou,Organisateur,Actif,Cotonou#Prog,Université d'Abomey-Calavi,Responsable programme,Aline Hounkpè
 aurelle.tchagna@deeplearningindaba.com,Dr. Aurelle Tchagna,Conférencier,Actif,Keynote-2026,Deep Learning Indaba,Directrice de recherche IA,Aline Hounkpè
 grace.senou@epitech.eu,Grace Senou,Volontaire,Actif,AccueilJ1-77,Epitech Bénin,Étudiante promo 2027,Koffi Emmanuel Dossou

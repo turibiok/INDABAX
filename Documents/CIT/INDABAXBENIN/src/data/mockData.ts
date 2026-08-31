@@ -66,7 +66,7 @@ export const INITIAL_SESSIONS: Session[] = [
   },
   {
     id: 'ses-104',
-    title: "Session Poster & Networking Baobab : Présentation des Travaux Étudiants",
+    title: "Session Poster & Networking : Présentation des Travaux Étudiants",
     speaker: "Comité Scientifique IndabaX",
     speakerTitle: "Évaluateurs & Chercheurs",
     speakerInstitution: "IndabaX Bénin Community",
@@ -75,7 +75,7 @@ export const INITIAL_SESSIONS: Session[] = [
     date: "2026-09-18",
     startTime: "16:30",
     endTime: "18:00",
-    room: "Hall d'Exposition Baobab",
+    room: "Hall d'Exposition & Posters",
     track: "Keynote",
     type: "Networking",
     level: "Tous niveaux",
@@ -201,7 +201,7 @@ export const INITIAL_SESSIONS: Session[] = [
   },
   {
     id: 'ses-303',
-    title: "Cérémonie de Clôture, Remise des Bourses de Recherche et Réseau Baobab 2026",
+    title: "Cérémonie de Clôture, Remise des Bourses de Recherche et Réseau IndabaX 2026",
     speaker: "Présidents du Comité IndabaX Bénin",
     speakerTitle: "Conseil Exécutif",
     speakerInstitution: "Deep Learning Indaba",
@@ -400,7 +400,7 @@ export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [
   {
     id: 'ann-001',
     title: "📢 Bienvenue à IndabaX Bénin 2026 ! Récupération des badges et kits",
-    content: "Chers participants, conférenciers et partenaires, l'équipe d'accueil est prête au Hall Baobab. Présentez votre QR Code numérique depuis l'onglet 'Mon Badge' pour récupérer votre kit participant et vos accès Wi-Fi haute vitesse.",
+    content: "Chers participants, conférenciers et partenaires, l'équipe d'accueil est prête au Hall d'Exposition. Présentez votre QR Code numérique depuis l'onglet 'Mon Badge' pour récupérer votre kit participant et vos accès Wi-Fi haute vitesse.",
     category: "LOGISTIQUE",
     priority: "urgent",
     authorName: "Mahuvi Vituribio K.",
@@ -528,7 +528,7 @@ export const INITIAL_CHAT_MESSAGES: import('../types').ChatMessage[] = [
     senderName: 'Mahuvi Vituribio K.',
     senderRole: 'organizer',
     senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
-    content: "Bienvenue à tous sur l'espace de discussion Baobab d'IndabaX Bénin ! N'hésitez pas à poser vos questions, échanger avec les conférenciers et synchroniser vos agendas.",
+    content: "Bienvenue à tous sur l'espace de discussion d'IndabaX Bénin ! N'hésitez pas à poser vos questions, échanger avec les conférenciers et synchroniser vos agendas.",
     timestamp: "2026-09-18T08:10:00Z",
     reactions: { '👏': ['usr-002', 'usr-004'], '🔥': ['usr-005'] }
   },

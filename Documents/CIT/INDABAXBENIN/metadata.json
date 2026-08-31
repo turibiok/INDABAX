@@ -1,6 +1,6 @@
 {
   "name": "IndabaX Bénin Event App",
-  "description": "Application de gestion de l'événement IndabaX Bénin inspirée de Baobab Deep Learning Indaba : connexion par email avec rôle attribué par l'administrateur, interfaces dédiées par rôle, scan QR des participants, check-in aux sessions, recueil des feedbacks et base de données Google Sheet (AppSheet) reliée par simple lien de partage.",
+  "description": "Application de gestion de l'événement IndabaX Bénin : connexion par email avec rôle attribué par l'administrateur, interfaces dédiées par rôle, scan QR des participants, check-in aux sessions, recueil des feedbacks et base de données Google Sheet (AppSheet) reliée par simple lien de partage.",
   "requestFramePermissions": [
     "camera"
   ],

@@ -42,7 +42,7 @@ const USERS_TEMPLATE: SheetTemplate = {
       'Aline Hounkpè',
       'Super-Admin',
       'Actif',
-      'Baobab2026!',
+      'Indabax2026!',
       'Comité IndabaX Bénin',
       'Coordinatrice générale',
       'Installation initiale',

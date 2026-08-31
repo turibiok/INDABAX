@@ -118,7 +118,7 @@ export const ScheduleView: React.FC<{
   return (
     <div className="space-y-6 pb-16">
       
-      {/* Hero Banner with Vibrant Baobab aesthetic */}
+      {/* Bandeau de tête du programme */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-900 via-emerald-800 to-stone-900 border border-emerald-700/50 p-6 sm:p-8 shadow-xl text-white">
         <div className="absolute top-0 right-0 w-96 h-96 bg-amber-400/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
         <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none"></div>

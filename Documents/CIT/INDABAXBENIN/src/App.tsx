@@ -229,7 +229,7 @@ const AppContent: React.FC = () => {
               <span className="font-heading font-black text-emerald-800 dark:text-emerald-400 text-sm">
                 INDABAX BÉNIN 2026
               </span>
-              <span>• Plateforme Inspirée de Baobab Deep Learning Indaba</span>
+              <span>• Deep Learning &amp; IA pour l&apos;Afrique de l&apos;Ouest</span>
             </div>
 
             <div className="flex items-center gap-4 text-[11px]">

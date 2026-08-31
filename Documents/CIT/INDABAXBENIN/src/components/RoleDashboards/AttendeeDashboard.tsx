@@ -126,7 +126,7 @@ export const AttendeeDashboard: React.FC = () => {
             </div>
           </div>
           <p className="text-2xl font-bold text-stone-900">{connections.length}</p>
-          <span className="text-[11px] text-stone-500 font-medium">Connexions Baobab</span>
+          <span className="text-[11px] text-stone-500 font-medium">Mes connexions</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs">

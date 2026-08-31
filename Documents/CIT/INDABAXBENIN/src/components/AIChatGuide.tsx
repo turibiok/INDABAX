@@ -26,7 +26,7 @@ export const AIChatGuide: React.FC = () => {
   }>>([
     {
       role: 'assistant',
-      content: `Kouabô ! Bienvenue sur le Guide Baobab IA d'IndabaX Bénin 2026. 🌴✨\n\nJe suis là pour vous orienter sur le programme, vous renseigner sur les conférenciers, les ateliers pratiques (NLP Fongbe, Vision, RAG, Éthique) et analyser des photos de posters de recherche.`
+      content: `Kouabô ! Bienvenue sur le Guide IA d'IndabaX Bénin 2026. 🌴✨\n\nJe suis là pour vous orienter sur le programme, vous renseigner sur les conférenciers, les ateliers pratiques (NLP Fongbe, Vision, RAG, Éthique) et analyser des photos de posters de recherche.`
     }
   ]);
 
@@ -141,7 +141,7 @@ export const AIChatGuide: React.FC = () => {
             </div>
           </div>
           <div>
-            <h2 className="font-heading font-black text-xl text-white">Guide Baobab IA • IndabaX</h2>
+            <h2 className="font-heading font-black text-xl text-white">Guide IA • IndabaX Bénin</h2>
             <p className="text-xs text-stone-300">Assistant intelligent propulsé par Gemini 2.5</p>
           </div>
         </div>

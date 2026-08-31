@@ -59,7 +59,7 @@ export function downloadIcsFile(sessions: Session[], calendarName = "IndabaX_Ben
   let icsContent = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//IndabaX Benin 2026//Baobab AI Conference//FR',
+    'PRODID:-//IndabaX Benin 2026//IndabaX AI Conference//FR',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:IndabaX Bénin 2026 - Mon Agenda',

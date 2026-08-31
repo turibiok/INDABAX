@@ -109,7 +109,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
         <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 text-[11px]">
           <span className="flex items-center gap-1.5 text-emerald-100 dark:text-stone-300 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Plateforme Baobab Live
+            Événement en direct
           </span>
           {isSheetsLinked && sheetsConfig.masterSheetUrl ? (
             <a
@@ -158,7 +158,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
                   INDABAX <span className="text-amber-600 dark:text-amber-400">BÉNIN</span>
                 </span>
                 <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                  Baobab
+                  2026
                 </span>
               </div>
               <p className="text-[11px] text-stone-600 dark:text-stone-400 font-medium">Deep Learning & IA pour l'Afrique</p>
