@@ -73,6 +73,61 @@ export function buildCsvUrl(
   return `${base}?${params.toString()}`;
 }
 
+/** URL de la page qui liste les onglets d'un classeur partage par lien. */
+export function buildHtmlViewUrl(spreadsheetId: string): string {
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/htmlview`;
+}
+
+/**
+ * Extrait les identifiants d'onglets d'une page `htmlview`.
+ *
+ * Les noms d'onglets n'y figurent pas, seulement leurs gid : c'est pourquoi la
+ * reconnaissance d'un onglet passe ensuite par ses colonnes.
+ */
+export function extractGidsFromHtml(html: string): string[] {
+  const found = new Set<string>();
+
+  for (const match of html.matchAll(/gid=(\d+)/g)) {
+    found.add(match[1]);
+  }
+
+  return Array.from(found);
+}
+
+/**
+ * Un onglet peut etre designe de trois facons : par son nom, par son gid, ou
+ * en collant l'URL de l'onglet (qui contient `#gid=`).
+ *
+ * Le gid est la designation fiable : sur un classeur simplement partage par
+ * lien, Google ignore le parametre `sheet=` et renvoie toujours l'onglet par
+ * defaut.
+ */
+export function parseTabRef(value: string): { gid: string } | { tab: string } {
+  const trimmed = (value || '').trim();
+
+  const fromUrl = extractGid(trimmed);
+  if (fromUrl) return { gid: fromUrl };
+
+  if (/^\d+$/.test(trimmed)) return { gid: trimmed };
+
+  return { tab: trimmed };
+}
+
+/**
+ * Proportion des colonnes attendues retrouvees parmi celles lues.
+ *
+ * Sert a reconnaitre un onglet a son contenu quand son nom n'est pas
+ * exploitable. Renvoie une valeur entre 0 et 1.
+ */
+export function scoreHeaders(actual: string[], expected: string[]): number {
+  if (expected.length === 0) return 0;
+
+  const present = new Set(actual.map(normalizeHeader).filter(Boolean));
+  const matched = expected.filter(header => present.has(normalizeHeader(header))).length;
+
+  return matched / expected.length;
+}
+
 /* ------------------------------------------------------------------ *
  * 2. Analyse CSV (RFC 4180 : guillemets, virgules et sauts de ligne)
  * ------------------------------------------------------------------ */

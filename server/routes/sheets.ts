@@ -9,7 +9,7 @@ import {
   updateSheetsConfig,
 } from '../store';
 import { AuthedRequest, requireAuth, requireCapability, updateSessionsForEmail } from '../sessions';
-import { readTab, SheetError, writeRows } from '../sheetsGateway';
+import { expectedHeadersFor, readTab, SheetError, TabKind, writeRows } from '../sheetsGateway';
 
 export const sheetsRouter = Router();
 
@@ -74,7 +74,7 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
   const candidate = { ...getSheetsConfig(), masterSheetUrl: sheetUrl, usersTab };
 
   try {
-    const table = await readTab(usersTab, candidate);
+    const table = await readTab(usersTab, candidate, expectedHeadersFor('users'));
     const accounts = mapUserAccounts(table);
 
     if (accounts.length === 0) {
@@ -139,6 +139,17 @@ sheetsRouter.post('/unlink', requireCapability('canManageIntegrations'), (_req, 
  * ------------------------------------------------------------------ */
 
 const READABLE_TABS = ['participants', 'sessions', 'announcements'] as const;
+
+/**
+ * Categorie d'onglet correspondante, pour reconnaitre l'onglet a ses colonnes.
+ *
+ * L'onglet des annonces n'a pas de modele : rien a verifier, on lit ce que le
+ * nom renvoie.
+ */
+const KIND_MAP: Partial<Record<string, TabKind>> = {
+  participants: 'participants',
+  sessions: 'sessions',
+};
 type ReadableTab = (typeof READABLE_TABS)[number];
 
 function tabNameFor(kind: ReadableTab): string {
@@ -166,7 +177,12 @@ sheetsRouter.get('/data/:kind', requireAuth, async (req: AuthedRequest, res) => 
   }
 
   try {
-    const table = await readTab(tabNameFor(kind));
+    const mapped = KIND_MAP[kind];
+    const table = await readTab(
+      tabNameFor(kind),
+      undefined,
+      mapped ? expectedHeadersFor(mapped) : undefined,
+    );
     res.json({ headers: table.headers, rows: table.rows, count: table.rows.length });
   } catch (error: any) {
     const status = error instanceof SheetError ? error.status : 500;

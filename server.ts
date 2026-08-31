@@ -13,7 +13,7 @@ import {
   verifyConfiguredSheet,
 } from "./server/store";
 import { mapUserAccounts } from "./src/lib/sheets";
-import { readTab } from "./server/sheetsGateway";
+import { expectedHeadersFor, readTab } from "./server/sheetsGateway";
 import { isCookieSecure, sessionCount, startSessionSweeper } from "./server/sessions";
 
 dotenv.config();
@@ -93,7 +93,9 @@ async function startServer() {
 
   if (sheets.masterSheetUrl.trim() && !sheets.isLinked) {
     const result = await verifyConfiguredSheet(async () =>
-      mapUserAccounts(await readTab(getSheetsConfig().usersTab)),
+      mapUserAccounts(
+        await readTab(getSheetsConfig().usersTab, undefined, expectedHeadersFor("users")),
+      ),
     );
 
     console.log(

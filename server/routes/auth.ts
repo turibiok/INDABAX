@@ -35,7 +35,7 @@ import {
   updateSessionRole,
   updateSessionsForEmail,
 } from '../sessions';
-import { readTab, SheetError } from '../sheetsGateway';
+import { expectedHeadersFor, readTab, SheetError } from '../sheetsGateway';
 
 export const authRouter = Router();
 
@@ -106,7 +106,7 @@ async function resolveAccount(email: string): Promise<Resolution> {
 
   if (config.isLinked && config.masterSheetUrl.trim()) {
     try {
-      const table = await readTab(config.usersTab, config);
+      const table = await readTab(config.usersTab, config, expectedHeadersFor('users'));
       const account = mapUserAccounts(table).find(item => item.email === email);
       if (account) {
         return { account, source: 'sheet', passwordHash: await resolvePasswordHash(account) };
@@ -446,7 +446,7 @@ authRouter.delete('/accounts/:email', requireCapability('canManageRoles'), (req:
 authRouter.post('/accounts/reload', requireCapability('canManageRoles'), async (_req, res) => {
   try {
     const config = getSheetsConfig();
-    const table = await readTab(config.usersTab, config);
+    const table = await readTab(config.usersTab, config, expectedHeadersFor('users'));
     const accounts = mapUserAccounts(table);
 
     if (accounts.length === 0) {

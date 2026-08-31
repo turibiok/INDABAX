@@ -1,6 +1,8 @@
 import {
   buildCsvUrl,
+  buildHtmlViewUrl,
   extractGid,
+  extractGidsFromHtml,
   extractSpreadsheetId,
   isAllowedGoogleUrl,
   mapUserAccounts,
@@ -8,6 +10,8 @@ import {
   parseCsv,
   parseRole,
   parseStatus,
+  parseTabRef,
+  scoreHeaders,
   toTable,
 } from './sheets';
 import { SHEET_TEMPLATES, templateToCsv } from '../data/sheetTemplates';
@@ -179,6 +183,87 @@ check(
   'le statut en attente est reconnu',
   templateAccounts.filter(account => account.status === 'pending').length,
   1,
+);
+/* ------------------------------------------------------------------ *
+ * Adressage des onglets.
+ *
+ * Sur un classeur simplement partage par lien, Google ignore le parametre
+ * `sheet=` et renvoie toujours l'onglet par defaut. Un onglet doit donc
+ * pouvoir etre designe par son gid, et reconnu a ses colonnes.
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- parseTabRef ---');
+check('nom d onglet', parseTabRef('Utilisateurs'), { tab: 'Utilisateurs' });
+check('gid numerique', parseTabRef('644285085'), { gid: '644285085' });
+check(
+  'URL d onglet collee',
+  parseTabRef('https://docs.google.com/spreadsheets/d/ABC/edit#gid=934049423'),
+  { gid: '934049423' },
+);
+check('espaces autour du gid', parseTabRef('  771029365  '), { gid: '771029365' });
+check('nom contenant des chiffres', parseTabRef('Salle 2'), { tab: 'Salle 2' });
+
+console.log('\n--- extractGidsFromHtml ---');
+check(
+  'gid extraits et dedoublonnes',
+  extractGidsFromHtml(
+    '<a href="?gid=644285085">x</a><a href="#gid=771029365">y</a><a href="?gid=644285085">z</a>',
+  ),
+  ['644285085', '771029365'],
+);
+check('aucun gid', extractGidsFromHtml('<html><body>rien</body></html>'), []);
+
+console.log('\n--- buildHtmlViewUrl ---');
+check(
+  'URL de la page des onglets',
+  buildHtmlViewUrl('ID1'),
+  'https://docs.google.com/spreadsheets/d/ID1/htmlview',
+);
+
+console.log('\n--- scoreHeaders ---');
+const USERS = SHEET_TEMPLATES.find(t => t.tab === 'Utilisateurs')!.headers;
+const PARTICIPANTS = SHEET_TEMPLATES.find(t => t.tab === 'Participants')!.headers;
+
+check('un onglet se reconnait a lui-meme', scoreHeaders(USERS, USERS), 1);
+// Les modeles partagent Email, Nom, Role, Institution et Poste : Participants
+// atteint donc 5/8 face aux colonnes de Utilisateurs. C'est au-dessus d'un
+// seuil naif, d'ou le seuil d'acceptation eleve (0,85) cote serveur.
+check('recouvrement mesure entre les deux modeles', scoreHeaders(PARTICIPANTS, USERS), 0.625);
+check(
+  'ce recouvrement reste sous le seuil d acceptation par le nom',
+  scoreHeaders(PARTICIPANTS, USERS) < 0.85,
+  true,
+);
+check(
+  'le bon onglet devance toujours les autres',
+  scoreHeaders(USERS, USERS) > scoreHeaders(PARTICIPANTS, USERS),
+  true,
+);
+check(
+  'Utilisateurs ne passe pas pour Participants',
+  scoreHeaders(USERS, PARTICIPANTS) < 0.6,
+  true,
+);
+check('accents et casse ignores', scoreHeaders(['EMAIL', 'Rôle'], ['email', 'role']), 1);
+check('colonnes absentes', scoreHeaders([], USERS), 0);
+check('attente vide', scoreHeaders(USERS, []), 0);
+
+// Le cas reel qui a motive la correction : le classeur renvoyait l onglet
+// Participants alors que l application demandait Utilisateurs.
+// Cas reel : le classeur renvoyait l onglet Participants alors que
+// l application demandait Utilisateurs. Le classement doit trancher.
+const ONGLET_RENVOYE = ['ID', 'Billet', 'Nom', 'Email', 'Role', 'Institution', 'Poste', 'Pays', 'Ville', 'Interets'];
+const ONGLET_ATTENDU = ['Email', 'Nom', 'Role', 'Statut', 'Mot de passe', 'Institution', 'Poste', 'Attribue par'];
+
+check(
+  'l onglet renvoye par erreur n est pas accepte sur son nom',
+  scoreHeaders(ONGLET_RENVOYE, USERS) < 0.85,
+  true,
+);
+check(
+  'et le vrai onglet Utilisateurs le devance',
+  scoreHeaders(ONGLET_ATTENDU, USERS) > scoreHeaders(ONGLET_RENVOYE, USERS),
+  true,
 );
 console.log(`\n=== ${passed} reussis, ${failed} echoues ===`);
 if (failed > 0) process.exit(1);

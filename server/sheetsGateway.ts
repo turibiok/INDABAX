@@ -1,12 +1,17 @@
 import {
   buildCsvUrl,
+  buildHtmlViewUrl,
   extractGid,
+  extractGidsFromHtml,
   extractSpreadsheetId,
   isAllowedGoogleUrl,
   parseCsv,
+  parseTabRef,
+  scoreHeaders,
   SheetTable,
   toTable,
 } from '../src/lib/sheets';
+import { SHEET_TEMPLATES } from '../src/data/sheetTemplates';
 import { getSheetsConfig, ServerSheetsConfig } from './store';
 
 /**
@@ -48,32 +53,32 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}) {
 }
 
 /**
- * Lit un onglet du classeur configure.
- *
- * Attention : quand le nom d'onglet demande n'existe pas, Google renvoie le
- * PREMIER onglet du classeur au lieu d'une erreur. Les appelants doivent donc
- * valider les colonnes obtenues plutot que de se fier au succes de l'appel.
+ * Colonnes attendues par categorie d'onglet, reprises des modeles montres aux
+ * organisateurs : la reconnaissance d'un onglet et la documentation ne peuvent
+ * donc pas divulguer.
  */
-export async function readTab(tab: string | undefined, config?: ServerSheetsConfig): Promise<SheetTable> {
-  const sheets = config || getSheetsConfig();
+export type TabKind = 'users' | 'participants' | 'sessions' | 'checkins' | 'feedbacks';
 
-  if (!sheets.masterSheetUrl.trim()) {
-    throw new SheetError(
-      'Aucun classeur Google Sheet configuré sur le serveur.',
-      409,
-      'not_configured',
-    );
-  }
+const TEMPLATE_BY_KIND: Record<TabKind, string> = {
+  users: 'Utilisateurs',
+  participants: 'Participants',
+  sessions: 'Sessions',
+  checkins: 'Check-ins',
+  feedbacks: 'Feedbacks',
+};
 
-  const spreadsheetId = extractSpreadsheetId(sheets.masterSheetUrl);
-  if (!spreadsheetId) {
-    throw new SheetError('Le lien du classeur enregistré est invalide.', 400, 'bad_link');
-  }
+export function expectedHeadersFor(kind: TabKind): string[] {
+  const template = SHEET_TEMPLATES.find(item => item.tab === TEMPLATE_BY_KIND[kind]);
+  return template ? template.headers : [];
+}
 
-  // Si le lien pointe deja vers un onglet precis (#gid=...), on le respecte,
-  // sauf si un nom d'onglet explicite est demande.
-  const gid = tab ? null : extractGid(sheets.masterSheetUrl);
-  const csvUrl = buildCsvUrl(spreadsheetId, { tab, gid });
+/** Recupere une table CSV a une adresse d'onglet donnee. */
+async function fetchTable(
+  spreadsheetId: string,
+  target: { tab?: string; gid?: string | null },
+  label: string,
+): Promise<SheetTable> {
+  const csvUrl = buildCsvUrl(spreadsheetId, target);
 
   if (!isAllowedGoogleUrl(csvUrl)) {
     throw new SheetError('URL sortante non autorisée.', 400, 'blocked_host');
@@ -84,7 +89,7 @@ export async function readTab(tab: string | undefined, config?: ServerSheetsConf
   if (!response.ok) {
     throw new SheetError(
       response.status === 404
-        ? `Onglet « ${tab || 'par défaut'} » introuvable dans le classeur.`
+        ? `Onglet « ${label} » introuvable dans le classeur.`
         : `Le classeur n'est pas accessible (HTTP ${response.status}). Vérifiez qu'il est partagé en lecture avec « Tous les utilisateurs disposant du lien ».`,
       502,
       'unreachable',
@@ -103,6 +108,131 @@ export async function readTab(tab: string | undefined, config?: ServerSheetsConf
   }
 
   return toTable(parseCsv(body));
+}
+
+/** Adresses d'onglets déjà résolues, par classeur et par nom demandé. */
+const resolvedGids = new Map<string, string>();
+
+/**
+ * Deux seuils, parce que deux questions differentes se posent.
+ *
+ * `STRONG_MATCH` decide si l'onglet rendu par son nom est le bon, sans rien
+ * verifier d'autre. Il doit etre eleve : les modeles partagent beaucoup de
+ * colonnes — `Participants` retrouve 5 des 8 colonnes de `Utilisateurs`, soit
+ * 0,62 — et un seuil bas ferait accepter le mauvais onglet, ce qui est
+ * precisement le defaut que cette resolution corrige.
+ *
+ * `MIN_MATCH` sert quand tous les onglets ont ete compares entre eux : le
+ * meilleur gagne, et ce plancher ne fait qu'ecarter un classeur qui ne
+ * contient rien de ressemblant.
+ */
+const STRONG_MATCH = 0.85;
+const MIN_MATCH = 0.5;
+
+/** Liste les gid des onglets d'un classeur. */
+async function discoverGids(spreadsheetId: string): Promise<string[]> {
+  const response = await fetchWithTimeout(buildHtmlViewUrl(spreadsheetId));
+  if (!response.ok) return [];
+
+  return extractGidsFromHtml(await response.text());
+}
+
+/**
+ * Lit un onglet du classeur configure.
+ *
+ * Deux pieges de Google sont traites ici.
+ *
+ * D'une part, un nom d'onglet inexistant ne provoque pas d'erreur : le premier
+ * onglet du classeur est renvoye a sa place. D'autre part, sur un classeur
+ * simplement partage par lien — et non publie — le parametre `sheet=` est
+ * purement ignore, si bien que TOUS les noms renvoient l'onglet par defaut.
+ *
+ * `expectedHeaders` permet donc de verifier qu'on a bien l'onglet voulu. En cas
+ * de desaccord, les onglets du classeur sont parcourus par leur gid et celui
+ * dont les colonnes correspondent est retenu, puis memorise.
+ */
+export async function readTab(
+  tab: string | undefined,
+  config?: ServerSheetsConfig,
+  expectedHeaders?: string[],
+): Promise<SheetTable> {
+  const sheets = config || getSheetsConfig();
+
+  if (!sheets.masterSheetUrl.trim()) {
+    throw new SheetError(
+      'Aucun classeur Google Sheet configuré sur le serveur.',
+      409,
+      'not_configured',
+    );
+  }
+
+  const spreadsheetId = extractSpreadsheetId(sheets.masterSheetUrl);
+  if (!spreadsheetId) {
+    throw new SheetError('Le lien du classeur enregistré est invalide.', 400, 'bad_link');
+  }
+
+  // Aucun onglet demandé : on suit le lien tel quel, gid inclus s'il en porte un.
+  if (!tab) {
+    return fetchTable(spreadsheetId, { gid: extractGid(sheets.masterSheetUrl) }, 'par défaut');
+  }
+
+  // L'onglet peut être désigné par son gid, ou par l'URL de l'onglet.
+  const ref = parseTabRef(tab);
+  if ('gid' in ref) {
+    return fetchTable(spreadsheetId, { gid: ref.gid }, `gid ${ref.gid}`);
+  }
+
+  const cacheKey = `${spreadsheetId}:${ref.tab}`;
+  const cachedGid = resolvedGids.get(cacheKey);
+  if (cachedGid) {
+    return fetchTable(spreadsheetId, { gid: cachedGid }, ref.tab);
+  }
+
+  const byName = await fetchTable(spreadsheetId, { tab: ref.tab }, ref.tab);
+
+  // Sans colonnes attendues, on ne peut rien vérifier : on rend ce qui vient.
+  if (!expectedHeaders || expectedHeaders.length === 0) return byName;
+
+  if (scoreHeaders(byName.headers, expectedHeaders) >= STRONG_MATCH) return byName;
+
+  // Le nom n'a pas été honoré : on identifie l'onglet à ses colonnes.
+  const gids = await discoverGids(spreadsheetId);
+  let best: { gid: string; table: SheetTable; score: number } | null = null;
+
+  for (const gid of gids) {
+    let table: SheetTable;
+    try {
+      table = await fetchTable(spreadsheetId, { gid }, `gid ${gid}`);
+    } catch {
+      continue;
+    }
+
+    const score = scoreHeaders(table.headers, expectedHeaders);
+    if (!best || score > best.score) best = { gid, table, score };
+  }
+
+  if (best && best.score >= MIN_MATCH) {
+    resolvedGids.set(cacheKey, best.gid);
+    console.log(
+      `Onglet « ${ref.tab} » identifié par ses colonnes : gid ${best.gid} ` +
+        `(${Math.round(best.score * 100)} % de correspondance).`,
+    );
+    return best.table;
+  }
+
+  throw new SheetError(
+    `Aucun onglet du classeur ne correspond à « ${ref.tab} ». Colonnes attendues : ` +
+      `${expectedHeaders.join(', ')}. Colonnes lues dans l'onglet par défaut : ` +
+      `${byName.headers.filter(Boolean).join(', ') || 'aucune'}. ` +
+      `Vérifiez le nom de l'onglet, ou renseignez son gid à la place du nom.`,
+    422,
+    'tab_not_found',
+  );
+}
+
+/** Vide le cache de résolution des onglets (changement de configuration). */
+export function forgetResolvedTabs(): void {
+  resolvedGids.clear();
 }
 
 /** Ecrit des lignes dans un onglet, via Apps Script ou l'API AppSheet. */
