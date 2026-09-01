@@ -13,6 +13,7 @@ import {
   resolvePasswordHash,
   setAvatar,
   setPasswordHash,
+  updateProfileFields,
   toPublicAccount,
   upsertAccount,
 } from '../store';
@@ -48,6 +49,7 @@ import {
 } from '../sheetsGateway';
 import { forgetHashInSheet, rememberHashInSheet } from '../profileWriter';
 import { checkPhoto, savePhotoInSheet } from '../photos';
+import { appliquerPatch, checkProfile, saveProfileInSheet } from '../profileFields';
 
 export const authRouter = Router();
 
@@ -778,6 +780,67 @@ authRouter.post('/accounts/reload', requireCapability('canManageRoles'), async (
     const status = error instanceof SheetError ? error.status : 500;
     res.status(status).json({ error: error.message, reason: error instanceof SheetError ? error.reason : 'unknown' });
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * Informations de profil
+ * ------------------------------------------------------------------ */
+
+/**
+ * Chacun renseigne son propre profil, et seulement le sien.
+ *
+ * L'email vient de la session, jamais du corps de la requête. Le rôle, le
+ * statut et l'empreinte du mot de passe ne figurent pas dans les champs
+ * acceptés : sans cela, n'importe qui pourrait se nommer administrateur.
+ */
+authRouter.post('/profile', requireAuth, async (req: AuthedRequest, res) => {
+  const email = req.session!.email;
+  const checked = checkProfile(req.body);
+
+  if (checked.error || !checked.patch) {
+    return res.status(400).json({ error: checked.error, reason: checked.reason });
+  }
+
+  const patch = checked.patch;
+
+  // Un compte lu du classeur n'est pas encore dans la table du serveur : il y
+  // est placé d'abord, sinon les informations n'auraient nulle part où tenir.
+  if (!findAccount(email)) {
+    try {
+      const { account, source } = await resolveAccount(email);
+      upsertAccount({
+        email,
+        name: account.name,
+        role: account.role,
+        status: account.status,
+        institution: account.institution,
+        position: account.position,
+        ticketNumber: account.ticketNumber,
+        avatarUrl: account.avatarUrl,
+        assignedBy: source === 'sheet' ? 'Synchronisation classeur' : account.assignedBy,
+      });
+    } catch {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
+  }
+
+  const compte = updateProfileFields(email, existant => appliquerPatch(existant, patch));
+
+  if (!compte) {
+    return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+  }
+
+  // Le nom s'affiche dans les sessions ouvertes : il doit y suivre.
+  if (patch.name) updateSessionsForEmail(email, { name: compte.name });
+
+  const { warning } = await saveProfileInSheet(email, patch);
+
+  res.json({
+    ok: true,
+    profile: toPublicAccount(compte),
+    message: 'Profil mis à jour.',
+    warning,
+  });
 });
 
 /* ------------------------------------------------------------------ *

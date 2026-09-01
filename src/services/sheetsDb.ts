@@ -282,6 +282,28 @@ function doPost(e) {
     return -1;
   }
 
+  var colonnesAjoutees = [];
+
+  /**
+   * Ajoute les colonnes que la feuille ne possède pas encore.
+   *
+   * Sans cela, une donnée destinée à une colonne absente disparaît en silence :
+   * l'application annonce « enregistré » et rien n'est écrit. Les noms de
+   * colonnes viennent du serveur, jamais d'une saisie, donc cette extension ne
+   * peut pas polluer la feuille avec n'importe quoi.
+   */
+  function ensureColumns(row) {
+    if (headers.length === 0) return;
+
+    Object.keys(row).forEach(function (nom) {
+      if (columnIndex(nom) >= 0) return;
+
+      headers.push(nom);
+      sheet.getRange(1, headers.length).setValue(nom);
+      colonnesAjoutees.push(nom);
+    });
+  }
+
   // Colonne clé : quand elle est fournie, une ligne dont la clé existe déjà
   // est corrigée sur place au lieu d'être ajoutée. C'est ce qui garde une
   // seule ligne par personne dans l'onglet des participants.
@@ -305,6 +327,8 @@ function doPost(e) {
       headers = Object.keys(row);
       sheet.appendRow(headers);
       if (payload.keyColumn) keyIndex = columnIndex(payload.keyColumn);
+    } else {
+      ensureColumns(row);
     }
 
     var key = keyIndex >= 0 && row[headers[keyIndex]] !== undefined
@@ -338,6 +362,7 @@ function doPost(e) {
       written: payload.rows.length,
       added: added,
       updated: updated,
+      columnsAdded: colonnesAjoutees,
       sheet: sheet.getName(),
       created: created
     }))

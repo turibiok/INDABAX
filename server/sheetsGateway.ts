@@ -334,6 +334,8 @@ export interface ScriptWriteReply {
   /* Renseignés par la version du script qui sait mettre une ligne à jour. */
   added?: number;
   updated?: number;
+  /** Colonnes que le script a dû créer parce qu elles manquaient. */
+  columnsAdded?: string[];
 }
 
 /**
@@ -467,6 +469,16 @@ export async function writeRows(
           `les espaces. Pensez à supprimer l'onglet en double.`,
         409,
         'sheet_created',
+      );
+    }
+
+    // Une colonne creee signale un classeur en retard sur l application. Ce
+    // n est pas une erreur : le script vient de la poser, et la donnee est
+    // ecrite. Mais l organisateur gagne a le savoir.
+    if (parsed.columnsAdded && parsed.columnsAdded.length > 0) {
+      console.log(
+        `Colonne(s) ajoutée(s) à l onglet « ${parsed.sheet || table} » : ` +
+          parsed.columnsAdded.join(", ") + ".",
       );
     }
 

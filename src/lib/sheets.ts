@@ -392,6 +392,7 @@ export function mapUserAccount(row: Record<string, string>): UserAccount | null 
     bio: pick(row, 'bio', 'biographie', 'presentation', 'a propos') || undefined,
     phone: pick(row, 'telephone', 'phone', 'tel', 'whatsapp') || undefined,
     linkedin: pick(row, 'linkedin', 'linked in', 'profil linkedin', 'reseau') || undefined,
+    website: pick(row, 'site web', 'site', 'website', 'web', 'page web', 'portfolio', 'url') || undefined,
     interests: splitList(
       pick(row, 'interets', "centres d'interet", 'interests', 'tags', 'thematiques'),
     ),

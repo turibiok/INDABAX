@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
 import * as api from '../services/api';
+import { Logo } from './Logo';
 
 /**
  * Écran d'accès : connexion, inscription, mot de passe oublié, et
@@ -203,18 +204,19 @@ export const LoginView: React.FC = () => {
           {/* Identité de l'événement */}
           <div className="hidden md:flex flex-col justify-between bg-gradient-to-br from-emerald-900 via-emerald-800 to-stone-900 text-white rounded-3xl p-8 shadow-2xl">
             <div>
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 via-amber-500 to-orange-500 p-0.5 shadow-lg mb-5">
-                <div className="w-full h-full bg-stone-950 rounded-[14px] flex items-center justify-center">
-                  <span className="font-heading font-black text-xl bg-gradient-to-r from-amber-400 to-emerald-400 bg-clip-text text-transparent">
-                    IX
-                  </span>
-                </div>
-              </div>
+              {/*
+                * Le panneau est vert foncé : c'est la variante claire du logo
+                * qui convient, quel que soit le thème choisi par la personne.
+                */}
+              <img
+                src="/indabax-logo-clair.png"
+                alt="Deep Learning IndabaX Benin Republic"
+                width={900}
+                height={253}
+                className="w-full max-w-[280px] h-auto mb-6"
+              />
 
-              <h1 className="font-heading font-black text-3xl leading-tight">
-                INDABAX <span className="text-amber-400">BÉNIN</span>
-              </h1>
-              <p className="text-emerald-100 text-sm mt-2 font-medium">
+              <p className="text-emerald-100 text-sm font-medium">
                 Deep Learning &amp; IA pour l&apos;Afrique de l&apos;Ouest.
               </p>
 
@@ -242,10 +244,13 @@ export const LoginView: React.FC = () => {
 
           {/* Formulaire */}
           <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col justify-center">
-            <div className="md:hidden mb-6 text-center">
-              <h1 className="font-heading font-black text-2xl">
-                INDABAX <span className="text-amber-600">BÉNIN</span>
-              </h1>
+            {/*
+              * Sur écran étroit, le panneau d'identité est masqué : le logo
+              * doit donc figurer ici, sinon la page d'accueil de l'événement
+              * ne le montrerait pas du tout sur téléphone.
+              */}
+            <div className="md:hidden mb-6 flex justify-center">
+              <Logo variant="complet" height={52} alt="Deep Learning IndabaX Benin Republic" />
             </div>
 
             <div className="mb-6">

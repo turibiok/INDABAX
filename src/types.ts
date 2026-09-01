@@ -55,6 +55,9 @@ export interface Participant {
   github?: string;
   linkedin?: string;
   twitter?: string;
+  /** Site personnel, portfolio ou page de l'organisation. */
+  website?: string;
+  /** Renseigné par la personne : le plus souvent son numéro WhatsApp. */
   phone?: string;
   checkedInSessions: string[];
 }
@@ -169,6 +172,7 @@ export interface UserAccount {
   bio?: string;
   phone?: string;
   linkedin?: string;
+  website?: string;
   interests?: string[];
 }
 

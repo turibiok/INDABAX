@@ -374,3 +374,30 @@ export function updateMyPhoto(
 ): Promise<{ ok: boolean; profile: PublicUserAccount | null; message: string; warning?: string }> {
   return request('/api/auth/photo', { method: 'POST', body: { photo } });
 }
+
+/** Informations de profil qu'une personne renseigne pour elle-même. */
+export interface ProfileEdit {
+  name?: string;
+  institution?: string;
+  position?: string;
+  country?: string;
+  city?: string;
+  phone?: string;
+  linkedin?: string;
+  website?: string;
+  bio?: string;
+  interests?: string[];
+}
+
+/**
+ * Enregistre son propre profil.
+ *
+ * Ni le rôle, ni le statut, ni le mot de passe ne figurent dans cette forme :
+ * le serveur les refuserait de toute façon, mais mieux vaut que le type le
+ * dise aussi.
+ */
+export function updateMyProfile(
+  patch: ProfileEdit,
+): Promise<{ ok: boolean; profile: PublicUserAccount | null; message: string; warning?: string }> {
+  return request('/api/auth/profile', { method: 'POST', body: patch });
+}

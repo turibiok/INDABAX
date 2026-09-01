@@ -28,6 +28,7 @@ import {
   Lock
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
+import { Logo } from './Logo';
 import { AppTab, ROLE_LABELS } from '../permissions';
 import { PasswordChangeModal } from './PasswordChangeModal';
 
@@ -147,13 +148,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
 
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('schedule')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 via-amber-500 to-orange-500 p-0.5 shadow-md shadow-emerald-700/20 flex items-center justify-center">
-              <div className="w-full h-full bg-stone-900 rounded-[10px] flex items-center justify-center">
-                <span className="font-heading font-black text-lg bg-gradient-to-r from-amber-400 to-emerald-400 bg-clip-text text-transparent">
-                  IX
-                </span>
-              </div>
-            </div>
+            <Logo variant="ecusson" height={40} alt="IndabaX Bénin 2026" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-heading font-black text-lg tracking-tight text-stone-900 dark:text-white">

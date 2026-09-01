@@ -62,6 +62,40 @@ const { normalize, findSheet } = new Function(code)() as {
   findSheet: (spreadsheet: unknown, wanted: string) => { getName(): string } | null;
 };
 
+/**
+ * `columnIndex` et `ensureColumns` vivent dans la fermeture de `doPost` : elles
+ * lisent `headers`, `sheet` et `colonnesAjoutees`. On les extrait avec ces
+ * variables fournies autour, pour les exercer telles qu'elles tourneront.
+ */
+function monterEnsureColumns(entetes: string[]) {
+  const ecrites: Array<{ colonne: number; valeur: string }> = [];
+
+  const contexte = [
+    extractFunction(APPS_SCRIPT_SNIPPET, 'normalize'),
+    'var headers = donnees.entetes;',
+    'var colonnesAjoutees = [];',
+    'var sheet = donnees.sheet;',
+    extractFunction(APPS_SCRIPT_SNIPPET, 'columnIndex'),
+    extractFunction(APPS_SCRIPT_SNIPPET, 'ensureColumns'),
+    'return { ensureColumns: ensureColumns, headers: headers, ajoutees: colonnesAjoutees };',
+  ].join('\n');
+
+  const sheet = {
+    getRange: (_ligne: number, colonne: number) => ({
+      setValue: (valeur: string) => ecrites.push({ colonne, valeur }),
+    }),
+  };
+
+  // eslint-disable-next-line no-new-func
+  const monte = new Function('donnees', contexte)({ entetes, sheet }) as {
+    ensureColumns: (row: Record<string, unknown>) => void;
+    headers: string[];
+    ajoutees: string[];
+  };
+
+  return { ...monte, ecrites };
+}
+
 /** Faux classeur : seul `getSheets` est utilisé par `findSheet`. */
 const classeur = (...noms: string[]) => ({
   getSheets: () => noms.map(nom => ({ getName: () => nom })),
@@ -132,6 +166,64 @@ check(
   nomTrouve(findSheet(classeur('sessions-archive'), 'Sessions')),
   null,
 );
+
+/* ------------------------------------------------------------------ *
+ * Une colonne absente doit etre creee, pas ignoree.
+ *
+ * Sans cela, une donnee destinee a une colonne qui n'existe pas encore
+ * disparait en silence : l'application annonce « enregistre » et rien n'est
+ * ecrit. C'est arrive avec la colonne « Site web ».
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- ensureColumns ---');
+
+{
+  const m = monterEnsureColumns(['Email', 'Nom', 'Telephone']);
+  m.ensureColumns({ Email: 'a@b.c', Nom: 'Ada', 'Site web': 'ada.dev' });
+
+  check('la colonne manquante est ajoutee', m.ajoutees, ['Site web']);
+  check('elle vient a la fin des en-tetes', m.headers, ['Email', 'Nom', 'Telephone', 'Site web']);
+  check('elle est ecrite en 4e colonne', m.ecrites, [{ colonne: 4, valeur: 'Site web' }]);
+}
+
+{
+  const m = monterEnsureColumns(['Email', 'Nom']);
+  m.ensureColumns({ Email: 'a@b.c', Nom: 'Ada' });
+
+  check('rien a ajouter quand tout existe', m.ajoutees, []);
+  check('aucune ecriture inutile', m.ecrites.length, 0);
+}
+
+{
+  // La tolerance de forme s'applique ici aussi : « Telephone » et
+  // « Téléphone » sont la meme colonne, et la creer en double serait pire
+  // que de ne rien faire.
+  const m = monterEnsureColumns(['Email', 'Téléphone']);
+  m.ensureColumns({ Email: 'a@b.c', Telephone: '+229' });
+
+  check('accents et casse ne creent pas de doublon', m.ajoutees, []);
+}
+
+{
+  const m = monterEnsureColumns(['Email']);
+  m.ensureColumns({ Email: 'a@b.c', Bio: 'x', 'Site web': 'y' });
+
+  check('plusieurs colonnes ajoutees dans l ordre recu', m.ajoutees, ['Bio', 'Site web']);
+  check(
+    'chacune a sa position',
+    m.ecrites,
+    [{ colonne: 2, valeur: 'Bio' }, { colonne: 3, valeur: 'Site web' }],
+  );
+}
+
+{
+  // Une feuille vide est traitee ailleurs, par la creation de la ligne
+  // d'en-tetes : `ensureColumns` doit s'abstenir plutot que d'inventer.
+  const m = monterEnsureColumns([]);
+  m.ensureColumns({ Email: 'a@b.c' });
+
+  check('feuille sans en-tetes : abstention', m.ecrites.length, 0);
+}
 
 console.log(`\n=== ${passed} reussis, ${failed} echoues ===`);
 if (failed > 0) process.exit(1);

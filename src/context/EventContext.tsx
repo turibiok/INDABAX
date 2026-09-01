@@ -67,6 +67,8 @@ interface EventContextType {
   changeMyPassword: (currentPassword: string, newPassword: string) => Promise<string>;
   /** Change sa propre photo de profil. Une chaîne vide la retire. */
   changeMyPhoto: (photo: string) => Promise<string>;
+  /** Enregistre ses propres informations de profil. */
+  saveMyProfile: (patch: api.ProfileEdit) => Promise<string>;
   /** Role reellement attribue au compte connecte. */
   realRole: ParticipantRole;
   /** Role effectivement applique a l'interface (previsualisation Super-Admin incluse). */
@@ -964,6 +966,46 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           : item,
       ),
     );
+
+    return result.warning ? `${result.message} ${result.warning}` : result.message;
+  };
+
+  /**
+   * Enregistre son propre profil.
+   *
+   * La fiche affichée et l'annuaire suivent aussitôt : sans cela, la personne
+   * verrait ses anciennes informations après avoir validé, et croirait que
+   * rien n'a été enregistré.
+   */
+  const saveMyProfile = async (patch: api.ProfileEdit): Promise<string> => {
+    const result = await api.updateMyProfile(patch);
+    const profil = result.profile;
+
+    if (profil) {
+      const applique = <T extends Participant>(personne: T): T => ({
+        ...personne,
+        name: profil.name || personne.name,
+        institution: profil.institution || personne.institution,
+        position: profil.position || personne.position,
+        country: profil.country || personne.country,
+        city: profil.city || personne.city,
+        bio: profil.bio ?? personne.bio,
+        phone: profil.phone ?? personne.phone,
+        linkedin: profil.linkedin ?? personne.linkedin,
+        website: profil.website ?? personne.website,
+        interests: profil.interests ?? personne.interests,
+      });
+
+      setCurrentUser(prev => applique(prev));
+      setParticipants(prev =>
+        prev.map(item =>
+          normalizeEmail(item.email) === normalizeEmail(currentUser.email) ? applique(item) : item,
+        ),
+      );
+
+      // Le nom s'affiche dans l'en-tête : la session doit le porter aussi.
+      setAuthSession(prev => (prev && profil.name ? { ...prev, name: profil.name } : prev));
+    }
 
     return result.warning ? `${result.message} ${result.warning}` : result.message;
   };
@@ -1883,6 +1925,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       signOut,
       changeMyPassword,
       changeMyPhoto,
+      saveMyProfile,
       realRole,
       effectiveRole,
       capabilities,

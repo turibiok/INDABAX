@@ -269,13 +269,25 @@ export interface PublicSheetsConfig {
   hasAppSheetApi: boolean;
 }
 
-export function getPublicSheetsConfig(): PublicSheetsConfig {
+/**
+ * Vue publique de la configuration.
+ *
+ * Le lien du classeur n'y figure que sur demande explicite. Ce lien est un
+ * secret de fait : le classeur est partagé « à toute personne disposant du
+ * lien », si bien que le connaître suffit à lire l'annuaire entier, les
+ * émargements, et les mots de passe qu'un organisateur y aurait saisis. Or
+ * cet état est consulté sans session par l'écran de connexion, qui n'a besoin
+ * de savoir qu'une chose : si une base est reliée.
+ *
+ * @param revealUrl réservé au Super-Admin, seul à devoir voir le classeur.
+ */
+export function getPublicSheetsConfig(revealUrl = false): PublicSheetsConfig {
   const config = state.sheets;
   const hasWebhook = config.writeWebhookUrl.trim() !== '';
   const hasAppSheetApi = config.appSheetAppId.trim() !== '' && config.appSheetAccessKey.trim() !== '';
 
   return {
-    masterSheetUrl: config.masterSheetUrl,
+    masterSheetUrl: revealUrl ? config.masterSheetUrl : '',
     profilesTab: config.profilesTab,
     sessionsTab: config.sessionsTab,
     announcementsTab: config.announcementsTab,
@@ -356,6 +368,7 @@ export function upsertAccount(input: {
     bio: existing?.bio,
     phone: existing?.phone,
     linkedin: existing?.linkedin,
+    website: existing?.website,
     interests: existing?.interests,
   };
 
@@ -379,6 +392,38 @@ export function setAvatar(email: string, avatarUrl: string): boolean {
   account.avatarUrl = avatarUrl || undefined;
   writeStateToDisk();
   return true;
+}
+
+/**
+ * Applique des informations de profil à un compte existant.
+ *
+ * La fonction de transformation vient de `profileFields`, qui décide seul de
+ * ce qui est modifiable : le rôle, le statut et l'empreinte du mot de passe ne
+ * passent jamais par ici.
+ */
+export function updateProfileFields(
+  email: string,
+  transformer: (compte: UserAccount) => UserAccount,
+): UserAccount | undefined {
+  const clean = normalizeEmail(email);
+  const index = state.accounts.findIndex(item => normalizeEmail(item.email) === clean);
+  if (index < 0) return undefined;
+
+  const avant = state.accounts[index];
+  const apres = transformer(avant);
+
+  // L'identité et les droits restent ceux du compte enregistré, quoi que la
+  // transformation ait pu produire.
+  state.accounts[index] = {
+    ...apres,
+    email: avant.email,
+    role: avant.role,
+    status: avant.status,
+    passwordHash: avant.passwordHash,
+  };
+
+  writeStateToDisk();
+  return state.accounts[index];
 }
 
 /** Remplace l'empreinte du mot de passe d'un compte existant. */

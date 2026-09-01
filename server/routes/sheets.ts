@@ -8,7 +8,14 @@ import {
   replaceAccounts,
   updateSheetsConfig,
 } from '../store';
-import { AuthedRequest, requireAuth, requireCapability, updateSessionsForEmail } from '../sessions';
+import {
+  AuthedRequest,
+  getSession,
+  requireAuth,
+  requireCapability,
+  updateSessionsForEmail,
+} from '../sessions';
+import { capabilitiesFor } from '../../src/permissions';
 import {
   expectedHeadersFor,
   forgetResolvedTabs,
@@ -33,6 +40,18 @@ function forgetSheetDerivedState(): void {
 
 export const sheetsRouter = Router();
 
+/**
+ * Vrai pour le Super-Admin seul.
+ *
+ * « canManageIntegrations » ne suffit pas ici : l'organisateur la possède
+ * aussi, et le lien du classeur donne accès à tout son contenu, mots de passe
+ * compris. « canManageRoles » est la seule capacité réservée au Super-Admin.
+ */
+function estSuperAdmin(req: AuthedRequest): boolean {
+  const session = req.session || getSession(req);
+  return Boolean(session && capabilitiesFor(session.role).canManageRoles);
+}
+
 /* ------------------------------------------------------------------ *
  * Configuration
  * ------------------------------------------------------------------ */
@@ -42,8 +61,8 @@ export const sheetsRouter = Router();
  * Accessible sans session : l'ecran de connexion doit pouvoir indiquer si un
  * classeur est lie, et rien ici n'est sensible.
  */
-sheetsRouter.get('/config', (_req, res) => {
-  res.json({ config: getPublicSheetsConfig(), bootstrapNeeded: !getSheetsConfig().isLinked });
+sheetsRouter.get('/config', (req: AuthedRequest, res) => {
+  res.json({ config: getPublicSheetsConfig(estSuperAdmin(req)), bootstrapNeeded: !getSheetsConfig().isLinked });
 });
 
 const TAB_FIELDS = [
@@ -74,7 +93,7 @@ sheetsRouter.put('/config', requireCapability('canManageIntegrations'), (req: Au
 
   updateSheetsConfig(patch);
   forgetSheetDerivedState();
-  res.json({ config: getPublicSheetsConfig() });
+  res.json({ config: getPublicSheetsConfig(estSuperAdmin(req)) });
 });
 
 /**
@@ -147,7 +166,7 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
     }
 
     res.json({
-      config: getPublicSheetsConfig(),
+      config: getPublicSheetsConfig(estSuperAdmin(req)),
       accounts: accounts.length,
       sessionsUpdated,
       message: `Classeur lié : ${accounts.length} compte(s) détecté(s) dans l'onglet « ${profilesTab} ».`,
@@ -160,10 +179,10 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
   }
 });
 
-sheetsRouter.post('/unlink', requireCapability('canManageIntegrations'), (_req, res) => {
+sheetsRouter.post('/unlink', requireCapability('canManageIntegrations'), (req: AuthedRequest, res) => {
   updateSheetsConfig({ isLinked: false, lastError: undefined });
   forgetSheetDerivedState();
-  res.json({ config: getPublicSheetsConfig() });
+  res.json({ config: getPublicSheetsConfig(estSuperAdmin(req)) });
 });
 
 /* ------------------------------------------------------------------ *

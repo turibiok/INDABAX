@@ -132,7 +132,9 @@ export function updateSessionRole(
 /** Applique un changement de role a toutes les sessions ouvertes d'un email. */
 export function updateSessionsForEmail(
   email: string,
-  patch: { role?: ParticipantRole; status?: AccountStatus },
+  // Le nom est modifiable par la personne elle-même : il s'affiche dans les
+  // sessions ouvertes, qui doivent donc pouvoir le suivre sans reconnexion.
+  patch: { role?: ParticipantRole; status?: AccountStatus; name?: string },
 ): number {
   let touched = 0;
 

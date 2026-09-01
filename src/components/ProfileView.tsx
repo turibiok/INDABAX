@@ -19,6 +19,8 @@ import {
   ArrowLeft,
   ShieldCheck,
   Camera,
+  Pencil,
+  Globe,
 } from 'lucide-react';
 
 import { useEvent } from '../context/EventContext';
@@ -27,6 +29,7 @@ import { capabilitiesFor } from '../permissions';
 import { prepareProfilePhoto } from '../lib/image';
 import { Avatar } from './Avatar';
 import { RoleBadge } from './RoleBadge';
+import { ProfileEditor } from './ProfileEditor';
 
 /**
  * Fiche d'une personne : ses informations et tout ce qu'elle a fait.
@@ -136,6 +139,7 @@ export const ProfileView: React.FC = () => {
     [participants, viewedId, currentUser],
   );
   const isSelf = person.id === currentUser.id;
+  const [enEdition, setEnEdition] = useState(false);
 
   const email = (person.email || '').toLowerCase();
 
@@ -277,6 +281,7 @@ export const ProfileView: React.FC = () => {
     },
     { icon: Phone, label: 'Téléphone', value: person.phone },
     { icon: Linkedin, label: 'LinkedIn', value: person.linkedin },
+    { icon: Globe, label: 'Site web', value: person.website },
     { icon: Ticket, label: 'Billet', value: person.ticketNumber },
   ];
 
@@ -409,9 +414,29 @@ export const ProfileView: React.FC = () => {
         })}
       </div>
 
-      {/* Informations */}
+      {/* Informations, en lecture ou en modification */}
+      {isSelf && enEdition ? (
+        <ProfileEditor person={person} onClose={() => setEnEdition(false)} />
+      ) : (
       <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200/80 dark:border-stone-800 p-5 shadow-2xs">
-        <h2 className="text-sm font-bold text-stone-900 dark:text-stone-100 mb-3">Informations</h2>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-sm font-bold text-stone-900 dark:text-stone-100">Informations</h2>
+
+          {/*
+            * Chacun modifie sa propre fiche, quel que soit son rôle : la
+            * personne concernée sait mieux que l'organisation où elle
+            * travaille et comment la joindre.
+            */}
+          {isSelf && (
+            <button
+              onClick={() => setEnEdition(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+            >
+              <Pencil size={13} />
+              Modifier
+            </button>
+          )}
+        </div>
 
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
           {info.map(({ icon: Icon, label, value }) => (
@@ -457,6 +482,8 @@ export const ProfileView: React.FC = () => {
           </div>
         )}
       </div>
+
+      )}
 
       {/* Sessions retenues, pour soi seulement */}
       {isSelf && (
