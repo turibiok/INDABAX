@@ -209,15 +209,33 @@ function normalize(name) {
  * espaces ou un tiret : « Check-ins », « check ins » et « Checkins » désignent
  * le même onglet. Sans cette tolérance, le script créerait un doublon à côté
  * de l'onglet que vous regardez, et vos écritures sembleraient disparaître.
+ *
+ * Un préfixe commun est admis en second recours : beaucoup de classeurs
+ * nomment leurs onglets « indabax-sessions », « indabax-feedbacks ». Cette
+ * reconnaissance n'a lieu que si UN SEUL onglet finit ainsi — deux candidats
+ * valent mieux qu'un mauvais choix silencieux, et le script préfère alors
+ * échouer pour que le nom exact soit renseigné.
  */
 function findSheet(spreadsheet, wanted) {
   var target = normalize(wanted);
   var sheets = spreadsheet.getSheets();
+  var i;
 
-  for (var i = 0; i < sheets.length; i++) {
+  // 1. Nom exact, à la tolérance de forme près.
+  for (i = 0; i < sheets.length; i++) {
     if (normalize(sheets[i].getName()) === target) return sheets[i];
   }
-  return null;
+
+  // 2. Nom préfixé, à condition qu'il n'y ait pas d'ambiguïté.
+  var candidats = [];
+  for (i = 0; i < sheets.length; i++) {
+    var nom = normalize(sheets[i].getName());
+    if (nom.length > target.length && nom.lastIndexOf(target) === nom.length - target.length) {
+      candidats.push(sheets[i]);
+    }
+  }
+
+  return candidats.length === 1 ? candidats[0] : null;
 }
 
 function doPost(e) {
