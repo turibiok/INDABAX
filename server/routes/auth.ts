@@ -11,6 +11,7 @@ import {
   removeAccount,
   replaceAccounts,
   resolvePasswordHash,
+  setAvatar,
   setPasswordHash,
   toPublicAccount,
   upsertAccount,
@@ -46,6 +47,7 @@ import {
   SheetError,
 } from '../sheetsGateway';
 import { forgetHashInSheet, rememberHashInSheet } from '../profileWriter';
+import { checkPhoto, savePhotoInSheet } from '../photos';
 
 export const authRouter = Router();
 
@@ -776,4 +778,55 @@ authRouter.post('/accounts/reload', requireCapability('canManageRoles'), async (
     const status = error instanceof SheetError ? error.status : 500;
     res.status(status).json({ error: error.message, reason: error instanceof SheetError ? error.reason : 'unknown' });
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * Photo de profil
+ * ------------------------------------------------------------------ */
+
+/**
+ * Chacun change sa propre photo, et seulement la sienne.
+ *
+ * L'email vient de la session, jamais du corps de la requête : sans cela,
+ * n'importe qui pourrait remplacer la photo d'un organisateur, ce qui est
+ * précisément l'image dont on se méfie le moins.
+ */
+authRouter.post('/photo', requireAuth, async (req: AuthedRequest, res) => {
+  const email = req.session!.email;
+  const checked = checkPhoto(req.body?.photo);
+
+  if (checked.error) {
+    return res.status(400).json({ error: checked.error, reason: checked.reason });
+  }
+
+  // Un compte lu du classeur n'est pas encore dans la table du serveur : il y
+  // est placé avant, sinon la photo n'aurait nulle part où tenir.
+  if (!setAvatar(email, checked.value)) {
+    try {
+      const { account, source } = await resolveAccount(email);
+      upsertAccount({
+        email,
+        name: account.name,
+        role: account.role,
+        status: account.status,
+        institution: account.institution,
+        position: account.position,
+        ticketNumber: account.ticketNumber,
+        avatarUrl: checked.value,
+        assignedBy: source === 'sheet' ? 'Synchronisation classeur' : account.assignedBy,
+      });
+    } catch {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
+  }
+
+  const { warning } = await savePhotoInSheet(email, checked.value);
+  const account = findAccount(email);
+
+  res.json({
+    ok: true,
+    profile: account ? toPublicAccount(account) : null,
+    message: checked.value ? 'Photo mise à jour.' : 'Photo retirée.',
+    warning,
+  });
 });

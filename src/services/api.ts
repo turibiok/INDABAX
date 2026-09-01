@@ -357,3 +357,20 @@ export function sendMessage(
 export function retireMessage(id: string): Promise<{ ok: boolean; warning?: string }> {
   return request(`/api/social/messages/${encodeURIComponent(id)}/retire`, { method: 'POST' });
 }
+
+/* ------------------------------------------------------------------ *
+ * Photo de profil
+ * ------------------------------------------------------------------ */
+
+/**
+ * Change sa propre photo. Une chaîne vide la retire.
+ *
+ * La valeur est soit une image réduite en `data:image/...;base64,...`, soit
+ * l'adresse HTTPS d'une image déjà en ligne : une cellule de classeur ne peut
+ * recevoir que du texte.
+ */
+export function updateMyPhoto(
+  photo: string,
+): Promise<{ ok: boolean; profile: PublicUserAccount | null; message: string; warning?: string }> {
+  return request('/api/auth/photo', { method: 'POST', body: { photo } });
+}

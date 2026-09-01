@@ -7,6 +7,7 @@ import { NetworkingView } from './components/NetworkingView';
 import { RoleDashboardRouter } from './components/RoleDashboards/RoleDashboardRouter';
 import { AnnouncementsView } from './components/AnnouncementsView';
 import { DiscussionsView } from './components/DiscussionsView';
+import { ProfileView } from './components/ProfileView';
 import { AIChatGuide } from './components/AIChatGuide';
 import { QRScannerModal } from './components/QRScannerModal';
 import { FeedbackModal } from './components/FeedbackModal';
@@ -18,6 +19,7 @@ import { AppTab } from './permissions';
 import {
   Calendar,
   User,
+  IdCard,
   Users,
   BarChart3,
   Sparkles,
@@ -37,7 +39,8 @@ const MOBILE_TABS: { id: AppTab; label: string; icon: typeof Calendar }[] = [
   { id: 'discussions', label: 'Chat', icon: MessageSquare },
   { id: 'dashboard', label: 'Espace', icon: BarChart3 },
   { id: 'networking', label: 'Réseau', icon: Users },
-  { id: 'badge', label: 'Badge', icon: User },
+  { id: 'profile', label: 'Profil', icon: User },
+  { id: 'badge', label: 'Badge', icon: IdCard },
   { id: 'ai-guide', label: 'Guide IA', icon: Sparkles },
 ];
 
@@ -160,6 +163,7 @@ const AppContent: React.FC = () => {
         {currentTab === 'announcements' && <AnnouncementsView />}
 
         {currentTab === 'discussions' && <DiscussionsView />}
+        {currentTab === 'profile' && <ProfileView />}
 
         {currentTab === 'dashboard' && <RoleDashboardRouter />}
 

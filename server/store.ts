@@ -344,11 +344,37 @@ export function upsertAccount(input: {
     avatarUrl: input.avatarUrl ?? existing?.avatarUrl,
     assignedBy: input.assignedBy ?? existing?.assignedBy,
     assignedAt: new Date().toISOString(),
+    // Le reste du profil vient du classeur et n'est pas modifiable ici : il
+    // doit survivre a une inscription ou a un changement de role, sans quoi
+    // s'inscrire effacerait sa propre fiche.
+    country: existing?.country,
+    city: existing?.city,
+    bio: existing?.bio,
+    phone: existing?.phone,
+    linkedin: existing?.linkedin,
+    interests: existing?.interests,
   };
 
   state.accounts = [account, ...state.accounts.filter(item => normalizeEmail(item.email) !== email)];
   writeStateToDisk();
   return account;
+}
+
+/**
+ * Change la photo d'un compte existant. Une chaîne vide l'efface.
+ *
+ * Renvoie `false` si le compte n'est pas dans la table du serveur, ce qui
+ * arrive pour un compte lu du classeur et jamais encore enregistré : l'appelant
+ * doit alors l'y placer d'abord.
+ */
+export function setAvatar(email: string, avatarUrl: string): boolean {
+  const clean = normalizeEmail(email);
+  const account = state.accounts.find(item => normalizeEmail(item.email) === clean);
+  if (!account) return false;
+
+  account.avatarUrl = avatarUrl || undefined;
+  writeStateToDisk();
+  return true;
 }
 
 /** Remplace l'empreinte du mot de passe d'un compte existant. */

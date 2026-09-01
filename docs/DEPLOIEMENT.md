@@ -114,4 +114,4 @@ Puis, dans l'application : connectez-vous, ouvrez l'espace Super-Admin, vérifie
 - Les mots de passe sont conservés en empreinte scrypt salée, jamais en clair.
 - Le lien du classeur et les secrets d'écriture ne descendent jamais dans le navigateur.
 - Le client ne fournit jamais d'URL sortante : il nomme une catégorie de données, le serveur choisit l'onglet. Les appels sortants sont restreints aux hôtes Google.
-- L'onglet `Utilisateurs` du classeur contient les mots de passe initiaux : réservez sa consultation aux organisateurs.
+- Aucun mot de passe en clair ne figure dans le classeur : chacun choisit le sien en s'inscrivant, et l'onglet `Participants` n'en garde qu'une empreinte scrypt, dans la colonne `Empreinte`. Cette colonne est écrite par le serveur ; ne la recopiez pas d'une ligne à l'autre.

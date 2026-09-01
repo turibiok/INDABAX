@@ -7,6 +7,7 @@ export type AppTab =
   | 'discussions'
   | 'dashboard'
   | 'networking'
+  | 'profile'
   | 'badge'
   | 'ai-guide';
 
@@ -41,6 +42,7 @@ const ALL_TABS: AppTab[] = [
   'discussions',
   'dashboard',
   'networking',
+  'profile',
   'badge',
   'ai-guide',
 ];
@@ -75,7 +77,7 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
   speaker: {
     label: 'Conférencier',
     dashboardLabel: 'Espace Conférencier',
-    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'badge', 'ai-guide'],
+    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'profile', 'badge', 'ai-guide'],
     canScan: false,
     canBroadcast: false,
     canManageContent: false,
@@ -88,7 +90,7 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
   volunteer: {
     label: 'Volontaire',
     dashboardLabel: 'Espace Volontaire',
-    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'badge', 'ai-guide'],
+    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'profile', 'badge', 'ai-guide'],
     canScan: true,
     canBroadcast: false,
     canManageContent: false,
@@ -101,7 +103,7 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
   attendee: {
     label: 'Participant',
     dashboardLabel: 'Mon Espace',
-    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'badge', 'ai-guide'],
+    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'profile', 'badge', 'ai-guide'],
     canScan: false,
     canBroadcast: false,
     canManageContent: false,
@@ -114,7 +116,7 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
   sponsor: {
     label: 'Sponsor / Partenaire',
     dashboardLabel: 'Espace Partenaire',
-    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'badge'],
+    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'profile', 'badge'],
     canScan: false,
     canBroadcast: false,
     canManageContent: false,

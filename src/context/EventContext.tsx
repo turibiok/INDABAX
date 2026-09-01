@@ -65,6 +65,8 @@ interface EventContextType {
   signOut: () => Promise<void>;
   /** Changement de son propre mot de passe : l'actuel est exigé. */
   changeMyPassword: (currentPassword: string, newPassword: string) => Promise<string>;
+  /** Change sa propre photo de profil. Une chaîne vide la retire. */
+  changeMyPhoto: (photo: string) => Promise<string>;
   /** Role reellement attribue au compte connecte. */
   realRole: ParticipantRole;
   /** Role effectivement applique a l'interface (previsualisation Super-Admin incluse). */
@@ -941,6 +943,29 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const changeMyPassword = async (currentPassword: string, newPassword: string): Promise<string> => {
     const result = await api.changePassword(currentPassword, newPassword);
     return result.message;
+  };
+
+  /**
+   * Change sa propre photo, ou la retire quand la valeur est vide.
+   *
+   * La fiche et l'annuaire sont mis à jour dans la foulée : sans cela, la
+   * nouvelle photo n'apparaîtrait qu'à la prochaine connexion, et la personne
+   * croirait que le changement a échoué.
+   */
+  const changeMyPhoto = async (photo: string): Promise<string> => {
+    const result = await api.updateMyPhoto(photo);
+    const next = result.profile?.avatarUrl || '';
+
+    setCurrentUser(prev => ({ ...prev, avatarUrl: next }));
+    setParticipants(prev =>
+      prev.map(item =>
+        normalizeEmail(item.email) === normalizeEmail(currentUser.email)
+          ? { ...item, avatarUrl: next }
+          : item,
+      ),
+    );
+
+    return result.warning ? `${result.message} ${result.warning}` : result.message;
   };
 
   /** Relit le role depuis le classeur : utile si l'admin vient de le changer. */
@@ -1857,6 +1882,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       registerWithEmail,
       signOut,
       changeMyPassword,
+      changeMyPhoto,
       realRole,
       effectiveRole,
       capabilities,

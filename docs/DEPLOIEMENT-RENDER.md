@@ -58,7 +58,7 @@ Onglet **Environment** du service. Ces valeurs remplacent le fichier `.env`, qui
 
 | Variable | Rôle |
 | --- | --- |
-| `SHEET_USERS_TAB`, `SHEET_PARTICIPANTS_TAB`, `SHEET_SESSIONS_TAB`, `SHEET_CHECKINS_TAB`, `SHEET_FEEDBACKS_TAB` | Noms d'onglets, si vous n'utilisez pas ceux par défaut |
+| `SHEET_PROFILES_TAB`, `SHEET_SESSIONS_TAB`, `SHEET_CHECKINS_TAB`, `SHEET_FEEDBACKS_TAB`, `SHEET_ANNOUNCEMENTS_TAB`, `SHEET_MESSAGES_TAB` | Noms d'onglets, si vous n'utilisez pas ceux par défaut. `SHEET_USERS_TAB` et `SHEET_PARTICIPANTS_TAB` restent acceptés à la place du premier |
 | `APPSHEET_APP_ID`, `APPSHEET_ACCESS_KEY` | Écriture via l'API AppSheet au lieu du Apps Script |
 | `ADMIN_EMAILS`, `ADMIN_PASSWORD` | Accès de secours si la table des comptes est vide. **Déconseillé en production** : ce compte n'est pas enregistré en base, donc son mot de passe n'est pas modifiable depuis l'application et reste figé dans la configuration. Le compte `SUPERADMIN_*`, lui, est un vrai compte : préférez-le seul, et n'ajoutez ces deux variables que si vous vous retrouvez enfermé dehors. |
 
@@ -75,7 +75,7 @@ Onglet **Logs**. Vous devez lire, dans cet ordre :
 Configuration du classeur appliquée depuis l'environnement : masterSheetUrl.
 Compte Super-Admin créé : vous@exemple.bj
 Cookie de session : HttpOnly + Secure (HTTPS requis).
-Classeur Google Sheet lié : 12 compte(s) chargé(s) depuis l'onglet « Utilisateurs ».
+Classeur Google Sheet lié : 12 compte(s) chargé(s) depuis l'onglet « Participants ».
 IndabaX Bénin Event App à l'écoute sur le port 10000
 ```
 

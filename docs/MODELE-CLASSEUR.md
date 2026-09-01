@@ -18,33 +18,34 @@ Le lien du classeur, l'URL du Apps Script et la clé AppSheet sont enregistrés 
 
 | Onglet | Rôle | Sens |
 | --- | --- | --- |
-| `Utilisateurs` | Table d'authentification : un email, un mot de passe et le rôle que vous attribuez. | lecture |
-| `Participants` | Annuaire de l'événement : profils affichés dans le réseautage et sur les badges. | lecture |
+| `Participants` | Feuille maîtresse des personnes : elle sert à la fois d'annuaire (profils affichés dans le réseautage et sur les badges) et de table de connexion. | lecture-écriture |
 | `Sessions` | Programme des trois journées : horaires, salles, intervenants et thématiques. | lecture |
 | `Check-ins` | Émargements : le serveur y ajoute une ligne à chaque scan de QR code. | écriture |
 | `Feedbacks` | Évaluations des sessions : notes de 1 à 5, commentaires et questions posées aux intervenants. | écriture |
+| `Annonces` | Annonces publiées à tout l'événement. | lecture-écriture |
+| `Messages` | Un seul fil de messages pour les salons de discussion et les commentaires sous les annonces : la colonne « Fil » dit à quoi le message se rattache. | lecture-écriture |
 
 ---
 
-## 1. Onglet `Utilisateurs`
+## 1. Onglet `Participants`
 
-**Rôle.** Table d'authentification : un email, un mot de passe et le rôle que vous attribuez. C'est cette feuille qui décide de l'interface obtenue par chacun.
+**Rôle.** Feuille maîtresse des personnes : elle sert à la fois d'annuaire (profils affichés dans le réseautage et sur les badges) et de table de connexion. C'est elle qui décide de l'interface obtenue par chacun.
 
-**Sens.** Lue par l'application. Vous la remplissez, elle ne la modifie pas.
+**Sens.** Lue et complétée par l'application.
 
 **Colonne indispensable.** `Email`
 
 ### Colonnes et exemple
 
-| Email | Nom | Role | Statut | Mot de passe | Institution | Poste | Attribue par |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| aline.hounkpe@indabax.bj | Aline Hounkpè | Super-Admin | Actif | Indabax2026! | Comité IndabaX Bénin | Coordinatrice générale | Installation initiale |
-| koffi.dossou@uac.bj | Koffi Emmanuel Dossou | Organisateur | Actif | Cotonou#Prog | Université d'Abomey-Calavi | Responsable programme | Aline Hounkpè |
-| aurelle.tchagna@deeplearningindaba.com | Dr. Aurelle Tchagna | Conférencier | Actif | Keynote-2026 | Deep Learning Indaba | Directrice de recherche IA | Aline Hounkpè |
-| grace.senou@epitech.eu | Grace Senou | Volontaire | Actif | AccueilJ1-77 | Epitech Bénin | Étudiante promo 2027 | Koffi Emmanuel Dossou |
-| amina.biotchane@uac.bj | Amina Bio Tchané | Participant | Actif | Fongbe-NLP-12 | EPAC / UAC | Étudiante Master IA | Koffi Emmanuel Dossou |
-| rodrigue.sossou@startuphub.bj | Rodrigue Sossou | Participant | En attente | Hackathon-J3 | Startup Hub Cotonou | Ingénieur données | Koffi Emmanuel Dossou |
-| partenaire@semecity.bj | Sèmè City | Sponsor | Actif | Partenaire-26 | Sèmè City | Partenaire institutionnel | Aline Hounkpè |
+| Email | Nom | Role | Statut | Institution | Poste | Pays | Ville | Interets | Telephone | LinkedIn | Bio | Photo | Billet | Attribue par | Empreinte |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| aline.hounkpe@indabax.bj | Aline Hounkpè | Super-Admin | Actif | Comité IndabaX Bénin | Coordinatrice générale | Bénin | Cotonou | Politiques IA; Communauté; Formation | +229 97 00 00 01 | linkedin.com/in/aline-hounkpe | Coordonne IndabaX Bénin depuis 2024. Travaille sur l'accès à la formation en IA hors des grandes villes. | _(vide)_ | INDABAX-BJ-2026-001 | Installation initiale | _(vide)_ |
+| koffi.dossou@uac.bj | Koffi Emmanuel Dossou | Organisateur | Actif | Université d'Abomey-Calavi | Responsable programme | Bénin | Abomey-Calavi | Vision par ordinateur; Enseignement; PyTorch | +229 97 00 00 02 | _(vide)_ | Enseignant-chercheur, monte le programme scientifique de l'édition 2026. | _(vide)_ | INDABAX-BJ-2026-002 | Aline Hounkpè | _(vide)_ |
+| aurelle.tchagna@deeplearningindaba.com | Dr. Aurelle Tchagna | Conférencier | Actif | Deep Learning Indaba | Directrice de recherche IA | Cameroun | Yaoundé | Vision par ordinateur; Santé; Éthique | _(vide)_ | linkedin.com/in/aurelle-tchagna | Dirige une équipe de recherche en imagerie médicale. Donne la keynote d'ouverture. | _(vide)_ | INDABAX-BJ-2026-108 | Aline Hounkpè | _(vide)_ |
+| grace.senou@epitech.eu | Grace Senou | Volontaire | Actif | Epitech Bénin | Étudiante promo 2027 | Bénin | Cotonou | MLOps; Développement web; Accueil | +229 97 00 00 04 | _(vide)_ | Tient l'accueil du jour 1 et le stand des ateliers. | _(vide)_ | INDABAX-BJ-2026-178 | Koffi Emmanuel Dossou | _(vide)_ |
+| amina.biotchane@uac.bj | Amina Bio Tchané | Participant | Actif | EPAC / UAC | Étudiante Master IA | Bénin | Abomey-Calavi | NLP; Fongbe; Traduction automatique | _(vide)_ | _(vide)_ | Prépare un mémoire sur la traduction automatique fongbe-français. | _(vide)_ | INDABAX-BJ-2026-042 | Koffi Emmanuel Dossou | _(vide)_ |
+| rodrigue.sossou@startuphub.bj | Rodrigue Sossou | Participant | En attente | Startup Hub Cotonou | Ingénieur données | Bénin | Cotonou | Séries temporelles; Agriculture; Hackathon | _(vide)_ | _(vide)_ | _(vide)_ | _(vide)_ | INDABAX-BJ-2026-211 | Koffi Emmanuel Dossou | _(vide)_ |
+| partenaire@semecity.bj | Sèmè City | Sponsor | Actif | Sèmè City | Partenaire institutionnel | Bénin | Sèmè-Podji | Innovation; Formation; Financement | _(vide)_ | _(vide)_ | Campus d'innovation partenaire de l'édition 2026. | _(vide)_ | INDABAX-BJ-2026-900 | Aline Hounkpè | _(vide)_ |
 
 ### Libellés de colonnes également acceptés
 
@@ -54,61 +55,33 @@ La lecture ignore les accents, les majuscules et les séparateurs. Ces variantes
 - `Nom` — `Nom complet`, `Name`, `Prénom Nom`, `Participant`
 - `Role` — `Rôle`, `Profil`, `Fonction`, `Type`, `Catégorie`
 - `Statut` — `Status`, `État`, `Actif`, `Validation`
-- `Mot de passe` — `Password`, `Motdepasse`, `Code`, `Code d'accès`, `PIN`
 - `Institution` — `Organisation`, `Structure`, `Entreprise`, `Université`, `Affiliation`
 - `Poste` — `Position`, `Titre`, `Job`
-
-### À savoir
-
-- Rôles reconnus en français comme en anglais : Super-Admin / Admin, Organisateur / Organizer / Staff, Conférencier / Speaker / Intervenant, Volontaire / Bénévole / Volunteer, Sponsor / Partenaire, Participant / Attendee.
-- Statuts reconnus : Actif, En attente, Suspendu. Un compte suspendu ne peut plus se connecter et ses sessions ouvertes sont fermées.
-- Le mot de passe est lu une fois puis remplacé par une empreinte côté serveur : il n'est jamais stocké en clair ailleurs que dans cette feuille.
-- Un participant qui change son mot de passe depuis l'application garde le sien : remplir à nouveau la cellule le réinitialise.
-- Réservez la vue de cet onglet aux organisateurs : il contient les mots de passe initiaux.
-
----
-
-## 2. Onglet `Participants`
-
-**Rôle.** Annuaire de l'événement : profils affichés dans le réseautage et sur les badges. Cette feuille ne sert pas à la connexion.
-
-**Sens.** Lue par l'application. Vous la remplissez, elle ne la modifie pas.
-
-**Colonne indispensable.** `Nom`
-
-### Colonnes et exemple
-
-| ID | Billet | Nom | Email | Role | Institution | Poste | Pays | Ville | Interets |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| usr-001 | INDABAX-BJ-2026-001 | Aline Hounkpè | aline.hounkpe@indabax.bj | Super-Admin | Comité IndabaX Bénin | Coordinatrice générale | Bénin | Cotonou | Politiques IA; Communauté; Formation |
-| usr-002 | INDABAX-BJ-2026-042 | Amina Bio Tchané | amina.biotchane@uac.bj | Participant | EPAC / UAC | Étudiante Master IA | Bénin | Abomey-Calavi | NLP; Fongbe; Traduction automatique |
-| usr-003 | INDABAX-BJ-2026-108 | Dr. Aurelle Tchagna | aurelle.tchagna@deeplearningindaba.com | Conférencier | Deep Learning Indaba | Directrice de recherche IA | Cameroun | Yaoundé | Vision par ordinateur; Santé; Éthique |
-| usr-004 | INDABAX-BJ-2026-178 | Grace Senou | grace.senou@epitech.eu | Volontaire | Epitech Bénin | Étudiante promo 2027 | Bénin | Cotonou | MLOps; Développement web; Accueil |
-
-### Libellés de colonnes également acceptés
-
-La lecture ignore les accents, les majuscules et les séparateurs. Ces variantes fonctionnent aussi :
-
-- `ID` — `Identifiant`
-- `Billet` — `Ticket`, `Ticket number`, `Numéro billet`, `Badge`
-- `Nom` — `Nom complet`, `Name`, `Participant`
-- `Email` — `Adresse email`, `Mail`, `Courriel`
-- `Role` — `Rôle`, `Profil`, `Fonction`, `Type`
-- `Institution` — `Organisation`, `Structure`, `Université`
-- `Poste` — `Position`, `Titre`
 - `Pays` — `Country`
 - `Ville` — `City`
-- `Interets` — `Centres d'intérêt`, `Interests`, `Tags`
+- `Interets` — `Centres d'intérêt`, `Interests`, `Tags`, `Thématiques`
+- `Telephone` — `Téléphone`, `Phone`, `Tel`, `WhatsApp`
+- `LinkedIn` — `Linked in`, `Profil LinkedIn`, `Reseau`, `Réseau`
+- `Bio` — `Biographie`, `Présentation`, `A propos`, `À propos`
+- `Photo` — `Avatar`, `Photo url`, `Image`, `Portrait`
+- `Billet` — `Ticket`, `Ticket number`, `Numéro billet`, `Badge`, `ID`
+- `Empreinte` — `Hash`, `Mot de passe`, `Password`, `Motdepasse`
 
 ### À savoir
 
+- Cet onglet remplace les deux anciens, « Utilisateurs » et « Participants » : une personne, une ligne, un seul endroit à tenir à jour.
+- Rôles reconnus en français comme en anglais : Super-Admin / Admin, Organisateur / Organizer / Staff, Conférencier / Speaker / Intervenant, Volontaire / Bénévole / Volunteer, Sponsor / Partenaire, Participant / Attendee.
+- Statuts reconnus : Actif, En attente, Suspendu. Un compte suspendu ne peut plus se connecter et ses sessions ouvertes sont fermées.
+- La colonne « Empreinte » est écrite par le serveur, jamais par vous : elle contient l'empreinte scrypt du mot de passe que la personne a choisi, dont on ne peut pas retrouver le mot de passe. Laissez-la vide à la création ; ne la recopiez pas d'une ligne à l'autre.
+- Aucun mot de passe en clair ne figure dans ce classeur. Une ligne dont l'empreinte est vide correspond à un compte encore à activer : la personne choisira son mot de passe elle-même, en s'inscrivant avec son email.
 - Les centres d'intérêt se séparent par point-virgule, virgule ou barre verticale.
-- L'ID et le numéro de billet sont facultatifs : ils sont générés si la colonne est vide.
-- Une ligne sans nom ni email est ignorée.
+- La colonne « Photo » est renseignée par la personne elle-même, depuis sa fiche : soit l'adresse d'une image, soit la photo réduite et compressée par l'application. Une cellule vide affiche les initiales, ce qui reste lisible.
+- Le numéro de billet est facultatif : il est généré s'il manque.
+- Une ligne sans email est ignorée : c'est l'email qui identifie une personne.
 
 ---
 
-## 3. Onglet `Sessions`
+## 2. Onglet `Sessions`
 
 **Rôle.** Programme des trois journées : horaires, salles, intervenants et thématiques.
 
@@ -149,7 +122,7 @@ La lecture ignore les accents, les majuscules et les séparateurs. Ces variantes
 
 ---
 
-## 4. Onglet `Check-ins`
+## 3. Onglet `Check-ins`
 
 **Rôle.** Émargements : le serveur y ajoute une ligne à chaque scan de QR code. Vous n'avez qu'à créer la feuille et sa ligne d'en-têtes.
 
@@ -172,7 +145,7 @@ La lecture ignore les accents, les majuscules et les séparateurs. Ces variantes
 
 ---
 
-## 5. Onglet `Feedbacks`
+## 4. Onglet `Feedbacks`
 
 **Rôle.** Évaluations des sessions : notes de 1 à 5, commentaires et questions posées aux intervenants. Alimentée par l’application.
 
@@ -194,31 +167,103 @@ La lecture ignore les accents, les majuscules et les séparateurs. Ces variantes
 
 ---
 
+## 5. Onglet `Annonces`
+
+**Rôle.** Annonces publiées à tout l'événement. L'application les lit et y ajoute une ligne à chaque publication : c'est ce classeur qui les rend visibles de tous, sur tous les appareils.
+
+**Sens.** Lue et complétée par l'application.
+
+**Colonne indispensable.** `Message`
+
+### Colonnes et exemple
+
+| ID | Horodateur | Categorie | Titre | Message | Auteur | Email auteur | Role | Epingle | Retire | Reactions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ann-001 | 18/09/2026 08:05:00 | PROGRAMME | Ouverture des portes à 8 h 30 | L'accueil se fait à l'entrée principale de l'UAC. Munissez-vous de votre QR code. | Aline Hounkpè | aline.hounkpe@indabax.bj | Super-Admin | oui | _(vide)_ | _(vide)_ |
+| ann-002 | 18/09/2026 12:40:00 | LOGISTIQUE | Déjeuner servi au hall Sud | Le déjeuner est servi de 13 h à 14 h 15. Les repas végétariens sont signalés par une étiquette verte. | Grace Senou | grace.senou@epitech.eu | Volontaire | _(vide)_ | _(vide)_ | _(vide)_ |
+| ann-003 | 19/09/2026 09:15:00 | URGENT | Changement de salle pour le workshop PyTorch | Le workshop de 11 h passe du Lab Turing à l'amphithéâtre Houdégbé : la salle prévue a un problème électrique. | Koffi Emmanuel Dossou | koffi.dossou@uac.bj | Organisateur | oui | _(vide)_ | _(vide)_ |
+
+### Libellés de colonnes également acceptés
+
+La lecture ignore les accents, les majuscules et les séparateurs. Ces variantes fonctionnent aussi :
+
+- `ID` — `Identifiant`
+- `Horodateur` — `Date`, `Publie le`, `Publié le`, `Timestamp`
+- `Categorie` — `Catégorie`, `Type`, `Priorite`, `Priorité`
+- `Titre` — `Title`, `Objet`
+- `Message` — `Contenu`, `Texte`, `Corps`, `Body`
+- `Auteur` — `Author`, `Publie par`, `Publié par`
+- `Email auteur` — `Email`, `Auteur email`
+- `Role` — `Rôle`, `Fonction`
+- `Epingle` — `Épinglé`, `Pinned`, `Important`
+- `Retire` — `Retiré`, `Supprime`, `Supprimé`, `Masque`, `Masqué`
+- `Reactions` — `Réactions`, `Jaime`, `J'aime`, `Likes`
+
+### À savoir
+
+- Catégories reconnues : URGENT, PROGRAMME, LOGISTIQUE, KEYNOTE, SOCIAL, HACKATHON. Une valeur inconnue retombe sur PROGRAMME.
+- Seuls les rôles autorisés à diffuser (Super-Admin, Organisateur) peuvent publier depuis l'application ; toute ligne ajoutée à la main est lue de la même façon.
+- Une annonce n'est jamais effacée : la retirer inscrit « oui » dans la colonne « Retire », ce qui la masque sans perdre la trace de ce qui a été dit.
+- Les colonnes « Epingle » et « Retire » acceptent oui / non, vrai / faux, true / false, 1 / 0.
+- La colonne « Reactions » tient la liste des emails ayant marqué « j'aime », séparés par des points-virgules. Elle est écrite par l'application.
+
+---
+
+## 6. Onglet `Messages`
+
+**Rôle.** Un seul fil de messages pour les salons de discussion et les commentaires sous les annonces : la colonne « Fil » dit à quoi le message se rattache.
+
+**Sens.** Lue et complétée par l'application.
+
+**Colonne indispensable.** `Message`
+
+### Colonnes et exemple
+
+| ID | Horodateur | Fil | Auteur | Email auteur | Role | Message | Retire | Reactions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| msg-001 | 18/09/2026 09:40:12 | canal:general | Amina Bio Tchané | amina.biotchane@uac.bj | Participant | Bonjour à tous ! Étudiante en Master IA à l'UAC, je travaille sur le fongbe. Ravie d'être là. | _(vide)_ | _(vide)_ |
+| msg-002 | 18/09/2026 09:44:03 | canal:general | Grace Senou | grace.senou@epitech.eu | Volontaire | Bienvenue Amina ! Le stand des ateliers est à droite en entrant si tu cherches ton badge. | _(vide)_ | _(vide)_ |
+| msg-003 | 19/09/2026 09:18:44 | annonce:ann-003 | Rodrigue Sossou | rodrigue.sossou@startuphub.bj | Participant | Merci pour l'info. Le matériel du workshop est déplacé aussi ? | _(vide)_ | _(vide)_ |
+| msg-004 | 19/09/2026 09:22:10 | annonce:ann-003 | Koffi Emmanuel Dossou | koffi.dossou@uac.bj | Organisateur | Oui, tout est transféré. Apportez seulement votre ordinateur portable. | _(vide)_ | _(vide)_ |
+
+### Libellés de colonnes également acceptés
+
+La lecture ignore les accents, les majuscules et les séparateurs. Ces variantes fonctionnent aussi :
+
+- `ID` — `Identifiant`
+- `Horodateur` — `Date`, `Envoye le`, `Envoyé le`, `Timestamp`
+- `Fil` — `Thread`, `Canal`, `Salon`, `Rattachement`, `Contexte`
+- `Auteur` — `Author`, `Nom`, `Expediteur`, `Expéditeur`
+- `Email auteur` — `Email`, `Auteur email`
+- `Role` — `Rôle`
+- `Message` — `Contenu`, `Texte`, `Body`
+- `Retire` — `Retiré`, `Supprime`, `Supprimé`, `Masque`, `Masqué`
+- `Reactions` — `Réactions`, `Jaime`, `J'aime`, `Likes`
+
+### À savoir
+
+- La colonne « Fil » vaut « canal:<identifiant> » pour un message de salon, ou « annonce:<identifiant> » pour un commentaire sous l'annonce correspondante. C'est ce qui permet de tenir les deux usages dans une seule feuille.
+- Les identifiants de salon sont ceux de l'application : canal:chan-general, canal:chan-nlp, canal:chan-cv, canal:chan-mlops, et ainsi de suite. Un identifiant inconnu crée simplement un fil de plus, invisible dans l'application.
+- Comme pour les annonces, un message retiré porte « oui » dans « Retire » : il disparaît de l'application, la ligne reste.
+- L'auteur, son email et son rôle sont inscrits par le serveur d'après la session : personne ne peut publier sous le nom d'un autre.
+
+---
+
 ## Annexe : les mêmes feuilles au format CSV
 
 Collez ces blocs dans un fichier `.csv` puis importez-le dans Google Sheets (**Fichier → Importer**), ou téléchargez-les directement depuis l'application.
 
-### Utilisateurs
-
-```csv
-Email,Nom,Role,Statut,Mot de passe,Institution,Poste,Attribue par
-aline.hounkpe@indabax.bj,Aline Hounkpè,Super-Admin,Actif,Indabax2026!,Comité IndabaX Bénin,Coordinatrice générale,Installation initiale
-koffi.dossou@uac.bj,Koffi Emmanuel Dossou,Organisateur,Actif,Cotonou#Prog,Université d'Abomey-Calavi,Responsable programme,Aline Hounkpè
-aurelle.tchagna@deeplearningindaba.com,Dr. Aurelle Tchagna,Conférencier,Actif,Keynote-2026,Deep Learning Indaba,Directrice de recherche IA,Aline Hounkpè
-grace.senou@epitech.eu,Grace Senou,Volontaire,Actif,AccueilJ1-77,Epitech Bénin,Étudiante promo 2027,Koffi Emmanuel Dossou
-amina.biotchane@uac.bj,Amina Bio Tchané,Participant,Actif,Fongbe-NLP-12,EPAC / UAC,Étudiante Master IA,Koffi Emmanuel Dossou
-rodrigue.sossou@startuphub.bj,Rodrigue Sossou,Participant,En attente,Hackathon-J3,Startup Hub Cotonou,Ingénieur données,Koffi Emmanuel Dossou
-partenaire@semecity.bj,Sèmè City,Sponsor,Actif,Partenaire-26,Sèmè City,Partenaire institutionnel,Aline Hounkpè
-```
-
 ### Participants
 
 ```csv
-ID,Billet,Nom,Email,Role,Institution,Poste,Pays,Ville,Interets
-usr-001,INDABAX-BJ-2026-001,Aline Hounkpè,aline.hounkpe@indabax.bj,Super-Admin,Comité IndabaX Bénin,Coordinatrice générale,Bénin,Cotonou,Politiques IA; Communauté; Formation
-usr-002,INDABAX-BJ-2026-042,Amina Bio Tchané,amina.biotchane@uac.bj,Participant,EPAC / UAC,Étudiante Master IA,Bénin,Abomey-Calavi,NLP; Fongbe; Traduction automatique
-usr-003,INDABAX-BJ-2026-108,Dr. Aurelle Tchagna,aurelle.tchagna@deeplearningindaba.com,Conférencier,Deep Learning Indaba,Directrice de recherche IA,Cameroun,Yaoundé,Vision par ordinateur; Santé; Éthique
-usr-004,INDABAX-BJ-2026-178,Grace Senou,grace.senou@epitech.eu,Volontaire,Epitech Bénin,Étudiante promo 2027,Bénin,Cotonou,MLOps; Développement web; Accueil
+Email,Nom,Role,Statut,Institution,Poste,Pays,Ville,Interets,Telephone,LinkedIn,Bio,Photo,Billet,Attribue par,Empreinte
+aline.hounkpe@indabax.bj,Aline Hounkpè,Super-Admin,Actif,Comité IndabaX Bénin,Coordinatrice générale,Bénin,Cotonou,Politiques IA; Communauté; Formation,+229 97 00 00 01,linkedin.com/in/aline-hounkpe,Coordonne IndabaX Bénin depuis 2024. Travaille sur l'accès à la formation en IA hors des grandes villes.,,INDABAX-BJ-2026-001,Installation initiale,
+koffi.dossou@uac.bj,Koffi Emmanuel Dossou,Organisateur,Actif,Université d'Abomey-Calavi,Responsable programme,Bénin,Abomey-Calavi,Vision par ordinateur; Enseignement; PyTorch,+229 97 00 00 02,,"Enseignant-chercheur, monte le programme scientifique de l'édition 2026.",,INDABAX-BJ-2026-002,Aline Hounkpè,
+aurelle.tchagna@deeplearningindaba.com,Dr. Aurelle Tchagna,Conférencier,Actif,Deep Learning Indaba,Directrice de recherche IA,Cameroun,Yaoundé,Vision par ordinateur; Santé; Éthique,,linkedin.com/in/aurelle-tchagna,Dirige une équipe de recherche en imagerie médicale. Donne la keynote d'ouverture.,,INDABAX-BJ-2026-108,Aline Hounkpè,
+grace.senou@epitech.eu,Grace Senou,Volontaire,Actif,Epitech Bénin,Étudiante promo 2027,Bénin,Cotonou,MLOps; Développement web; Accueil,+229 97 00 00 04,,Tient l'accueil du jour 1 et le stand des ateliers.,,INDABAX-BJ-2026-178,Koffi Emmanuel Dossou,
+amina.biotchane@uac.bj,Amina Bio Tchané,Participant,Actif,EPAC / UAC,Étudiante Master IA,Bénin,Abomey-Calavi,NLP; Fongbe; Traduction automatique,,,Prépare un mémoire sur la traduction automatique fongbe-français.,,INDABAX-BJ-2026-042,Koffi Emmanuel Dossou,
+rodrigue.sossou@startuphub.bj,Rodrigue Sossou,Participant,En attente,Startup Hub Cotonou,Ingénieur données,Bénin,Cotonou,Séries temporelles; Agriculture; Hackathon,,,,,INDABAX-BJ-2026-211,Koffi Emmanuel Dossou,
+partenaire@semecity.bj,Sèmè City,Sponsor,Actif,Sèmè City,Partenaire institutionnel,Bénin,Sèmè-Podji,Innovation; Formation; Financement,,,Campus d'innovation partenaire de l'édition 2026.,,INDABAX-BJ-2026-900,Aline Hounkpè,
 ```
 
 ### Sessions
@@ -246,4 +291,23 @@ Horodateur,Session,Nom,Note globale,Qualite contenu,Clarte orateur,Utilite prati
 18/09/2026 10:35:12,Keynote d'ouverture : l'essor de l'IA en Afrique de l'Ouest,Amina Bio Tchané,5,5,5,4,Cadrage très clair sur les enjeux de souveraineté des données.,Comment financer une thèse en IA au Bénin ?
 18/09/2026 13:08:44,Workshop pratique : réseaux de neurones et PyTorch moderne,Rodrigue Sossou,4,5,4,5,Excellents exercices. Il manquait un peu de temps pour la partie CNN.,
 19/09/2026 10:32:19,NLP et LLM pour les langues africaines : Fongbe et Yoruba,Amina Bio Tchané,5,5,4,5,Les corpus présentés vont directement servir à mon mémoire.,Les jeux de données Fongbe sont-ils publiés sous licence ouverte ?
+```
+
+### Annonces
+
+```csv
+ID,Horodateur,Categorie,Titre,Message,Auteur,Email auteur,Role,Epingle,Retire,Reactions
+ann-001,18/09/2026 08:05:00,PROGRAMME,Ouverture des portes à 8 h 30,L'accueil se fait à l'entrée principale de l'UAC. Munissez-vous de votre QR code.,Aline Hounkpè,aline.hounkpe@indabax.bj,Super-Admin,oui,,
+ann-002,18/09/2026 12:40:00,LOGISTIQUE,Déjeuner servi au hall Sud,Le déjeuner est servi de 13 h à 14 h 15. Les repas végétariens sont signalés par une étiquette verte.,Grace Senou,grace.senou@epitech.eu,Volontaire,,,
+ann-003,19/09/2026 09:15:00,URGENT,Changement de salle pour le workshop PyTorch,Le workshop de 11 h passe du Lab Turing à l'amphithéâtre Houdégbé : la salle prévue a un problème électrique.,Koffi Emmanuel Dossou,koffi.dossou@uac.bj,Organisateur,oui,,
+```
+
+### Messages
+
+```csv
+ID,Horodateur,Fil,Auteur,Email auteur,Role,Message,Retire,Reactions
+msg-001,18/09/2026 09:40:12,canal:general,Amina Bio Tchané,amina.biotchane@uac.bj,Participant,"Bonjour à tous ! Étudiante en Master IA à l'UAC, je travaille sur le fongbe. Ravie d'être là.",,
+msg-002,18/09/2026 09:44:03,canal:general,Grace Senou,grace.senou@epitech.eu,Volontaire,Bienvenue Amina ! Le stand des ateliers est à droite en entrant si tu cherches ton badge.,,
+msg-003,19/09/2026 09:18:44,annonce:ann-003,Rodrigue Sossou,rodrigue.sossou@startuphub.bj,Participant,Merci pour l'info. Le matériel du workshop est déplacé aussi ?,,
+msg-004,19/09/2026 09:22:10,annonce:ann-003,Koffi Emmanuel Dossou,koffi.dossou@uac.bj,Organisateur,"Oui, tout est transféré. Apportez seulement votre ordinateur portable.",,
 ```
