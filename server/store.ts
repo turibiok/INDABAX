@@ -43,6 +43,17 @@ interface ServerState {
   sheets: ServerSheetsConfig;
   /** Table locale des comptes, utilisee quand aucun classeur n'est lie. */
   accounts: UserAccount[];
+  /**
+   * Dernieres valeurs venues de l'environnement, telles qu'appliquees.
+   *
+   * Sert a distinguer deux situations qui se ressemblent : une valeur changee
+   * depuis l'application, qu'il faut conserver, et une variable d'environnement
+   * corrigee par l'administrateur, qu'il faut adopter. Sans cette trace, la
+   * seule regle possible etait « l'enregistre gagne toujours », qui rendait
+   * toute correction par variable sans effet tant que le fichier d'etat
+   * survivait — un piege constate en production.
+   */
+  envSnapshot?: Record<string, string>;
 }
 
 export const DEFAULT_SERVER_SHEETS_CONFIG: ServerSheetsConfig = {
@@ -92,6 +103,13 @@ function readStateFromDisk(): ServerState {
       version: 1,
       sheets,
       accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
+      // Sans cette relecture, la trace de l'environnement repartirait vide à
+      // chaque démarrage, et toute valeur enregistrée passerait pour une
+      // modification faite depuis l'application.
+      envSnapshot:
+        parsed.envSnapshot && typeof parsed.envSnapshot === 'object'
+          ? (parsed.envSnapshot as Record<string, string>)
+          : undefined,
     };
   } catch (error: any) {
     if (error.code !== 'ENOENT') {
@@ -145,14 +163,10 @@ export async function initStore() {
  * réglage initial, pas une contrainte permanente.
  */
 function applyEnvSheetConfig() {
-  const patch: Partial<ServerSheetsConfig> = {};
-
-  const url = (process.env.SHEET_URL || '').trim();
-  if (url && !state.sheets.masterSheetUrl.trim()) {
-    patch.masterSheetUrl = url;
-  }
-
-  const tabs: [keyof ServerSheetsConfig, string | undefined][] = [
+  /** Champ de configuration et variable qui le renseigne. */
+  const sources: [keyof ServerSheetsConfig, string | undefined][] = [
+    ['masterSheetUrl', process.env.SHEET_URL],
+    ['writeWebhookUrl', process.env.APPS_SCRIPT_URL],
     // Les deux anciens noms restent acceptés : un déploiement en place ne
     // doit pas cesser de trouver son onglet à cause de la fusion.
     [
@@ -166,33 +180,66 @@ function applyEnvSheetConfig() {
     ['sessionsTab', process.env.SHEET_SESSIONS_TAB],
     ['checkInsTab', process.env.SHEET_CHECKINS_TAB],
     ['feedbacksTab', process.env.SHEET_FEEDBACKS_TAB],
+    ['appSheetAppId', process.env.APPSHEET_APP_ID],
+    ['appSheetAccessKey', process.env.APPSHEET_ACCESS_KEY],
   ];
 
-  for (const [field, value] of tabs) {
-    if (value && value.trim()) patch[field] = value.trim() as never;
+  const precedent = state.envSnapshot || {};
+  const courant: Record<string, string> = {};
+  const patch: Partial<ServerSheetsConfig> = {};
+  const adoptes: string[] = [];
+  const conserves: string[] = [];
+
+  for (const [field, brut] of sources) {
+    const valeur = (brut || '').trim();
+    if (!valeur) continue;
+
+    courant[field] = valeur;
+
+    const enregistre = String(state.sheets[field] ?? '').trim();
+    if (enregistre === valeur) continue;
+
+    /*
+     * Une seule règle, valable dans les deux sens :
+     *
+     * une variable qui a changé depuis le dernier démarrage — celle qui vient
+     * d'apparaître comprise — est une consigne de l'administrateur, et elle
+     * s'applique. Une variable inchangée n'est qu'une valeur par défaut : ce
+     * qui est enregistré l'emporte, si bien qu'un réglage fait depuis
+     * l'application n'est pas défait à chaque redémarrage.
+     *
+     * Sans le premier volet, corriger une variable resterait sans effet tant
+     * que le fichier d'état survit — le piège constaté en production. Sans le
+     * second, l'environnement écraserait à chaque démarrage ce que les
+     * organisateurs viennent de régler.
+     */
+    if (!enregistre || valeur !== (precedent[field] || '')) {
+      patch[field] = valeur as never;
+      adoptes.push(field);
+      continue;
+    }
+
+    conserves.push(field);
   }
 
-  // Secrets d'écriture : appliqués seulement si rien n'est encore enregistré.
-  const webhook = (process.env.APPS_SCRIPT_URL || '').trim();
-  if (webhook && !state.sheets.writeWebhookUrl.trim()) {
-    patch.writeWebhookUrl = webhook;
+  state.envSnapshot = courant;
+
+  if (Object.keys(patch).length > 0) {
+    state.sheets = { ...state.sheets, ...patch };
   }
 
-  const appId = (process.env.APPSHEET_APP_ID || '').trim();
-  const accessKey = (process.env.APPSHEET_ACCESS_KEY || '').trim();
-  if (appId && accessKey && !state.sheets.appSheetAppId.trim()) {
-    patch.appSheetAppId = appId;
-    patch.appSheetAccessKey = accessKey;
-  }
-
-  if (Object.keys(patch).length === 0) return;
-
-  state.sheets = { ...state.sheets, ...patch };
   writeStateToDisk();
 
-  console.log(
-    `Configuration du classeur appliquée depuis l'environnement : ${Object.keys(patch).join(', ')}.`,
-  );
+  if (adoptes.length > 0) {
+    console.log(`Configuration reprise de l'environnement : ${adoptes.join(', ')}.`);
+  }
+
+  if (conserves.length > 0) {
+    console.log(
+      `Réglages modifiés depuis l'application et conservés : ${conserves.join(', ')}. ` +
+        "Pour imposer la valeur de l'environnement, changez-la dans l'application.",
+    );
+  }
 }
 
 /**

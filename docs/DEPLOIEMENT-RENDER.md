@@ -60,6 +60,31 @@ Onglet **Environment** du service. Ces valeurs remplacent le fichier `.env`, qui
 | --- | --- |
 | `SHEET_PROFILES_TAB`, `SHEET_SESSIONS_TAB`, `SHEET_CHECKINS_TAB`, `SHEET_FEEDBACKS_TAB`, `SHEET_ANNOUNCEMENTS_TAB`, `SHEET_MESSAGES_TAB` | Noms d'onglets, si vous n'utilisez pas ceux par défaut. `SHEET_USERS_TAB` et `SHEET_PARTICIPANTS_TAB` restent acceptés à la place du premier |
 | `APPSHEET_APP_ID`, `APPSHEET_ACCESS_KEY` | Écriture via l'API AppSheet au lieu du Apps Script |
+
+### Qui gagne : la variable, ou le réglage fait dans l'application ?
+
+Ces variables décrivent la configuration du classeur, que l'espace Super-Admin
+permet aussi de changer. La règle est la même pour toutes, dans les deux sens :
+
+- **Une variable qui a changé depuis le dernier démarrage s'applique**, y compris
+  celle qui vient d'apparaître. C'est une consigne : elle écrase ce qui était
+  enregistré. C'est le seul levier disponible quand une valeur enregistrée est
+  fausse — une URL de script périmée, par exemple.
+- **Une variable inchangée n'est qu'une valeur par défaut.** Ce qui a été réglé
+  depuis l'application l'emporte, et n'est donc pas défait à chaque redémarrage.
+
+Le serveur dit au démarrage ce qu'il a fait :
+
+```
+Configuration reprise de l'environnement : writeWebhookUrl.
+Réglages modifiés depuis l'application et conservés : profilesTab.
+```
+
+> Attention : sur Render, un **redémarrage** conserve le disque, alors qu'un
+> **déploiement** le remet à zéro. Une variable corrigée prend effet dans les
+> deux cas, mais si vous voyez « conservés » alors que vous attendiez le
+> contraire, c'est que la valeur avait été changée dans l'application ET que la
+> variable n'a pas bougé depuis.
 | `ADMIN_EMAILS`, `ADMIN_PASSWORD` | Accès de secours si la table des comptes est vide. **Déconseillé en production** : ce compte n'est pas enregistré en base, donc son mot de passe n'est pas modifiable depuis l'application et reste figé dans la configuration. Le compte `SUPERADMIN_*`, lui, est un vrai compte : préférez-le seul, et n'ajoutez ces deux variables que si vous vous retrouvez enfermé dehors. |
 
 Ces variables ne servent qu'à **initialiser** : une valeur déjà enregistrée par l'application n'est jamais écrasée au redémarrage. Vous pouvez donc modifier la configuration depuis l'interface sans qu'un redéploiement la remette en arrière.
