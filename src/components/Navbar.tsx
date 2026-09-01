@@ -3,6 +3,7 @@ import {
   Calendar,
   QrCode,
   User,
+  IdCard,
   Users,
   BarChart3,
   Sparkles,
@@ -83,7 +84,8 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
     discussions: { label: 'Discussions', icon: MessageSquare },
     dashboard: { label: capabilities.dashboardLabel, icon: getRoleDashboardIcon() },
     networking: { label: 'Réseautage', icon: Users },
-    badge: { label: 'Mon Badge', icon: User },
+    profile: { label: 'Mon Profil', icon: User },
+    badge: { label: 'Mon Badge', icon: IdCard },
     'ai-guide': { label: 'Guide IA', icon: Sparkles },
   };
 

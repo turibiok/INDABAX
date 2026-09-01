@@ -73,6 +73,61 @@ export function buildCsvUrl(
   return `${base}?${params.toString()}`;
 }
 
+/** URL de la page qui liste les onglets d'un classeur partage par lien. */
+export function buildHtmlViewUrl(spreadsheetId: string): string {
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/htmlview`;
+}
+
+/**
+ * Extrait les identifiants d'onglets d'une page `htmlview`.
+ *
+ * Les noms d'onglets n'y figurent pas, seulement leurs gid : c'est pourquoi la
+ * reconnaissance d'un onglet passe ensuite par ses colonnes.
+ */
+export function extractGidsFromHtml(html: string): string[] {
+  const found = new Set<string>();
+
+  for (const match of html.matchAll(/gid=(\d+)/g)) {
+    found.add(match[1]);
+  }
+
+  return Array.from(found);
+}
+
+/**
+ * Un onglet peut etre designe de trois facons : par son nom, par son gid, ou
+ * en collant l'URL de l'onglet (qui contient `#gid=`).
+ *
+ * Le gid est la designation fiable : sur un classeur simplement partage par
+ * lien, Google ignore le parametre `sheet=` et renvoie toujours l'onglet par
+ * defaut.
+ */
+export function parseTabRef(value: string): { gid: string } | { tab: string } {
+  const trimmed = (value || '').trim();
+
+  const fromUrl = extractGid(trimmed);
+  if (fromUrl) return { gid: fromUrl };
+
+  if (/^\d+$/.test(trimmed)) return { gid: trimmed };
+
+  return { tab: trimmed };
+}
+
+/**
+ * Proportion des colonnes attendues retrouvees parmi celles lues.
+ *
+ * Sert a reconnaitre un onglet a son contenu quand son nom n'est pas
+ * exploitable. Renvoie une valeur entre 0 et 1.
+ */
+export function scoreHeaders(actual: string[], expected: string[]): number {
+  if (expected.length === 0) return 0;
+
+  const present = new Set(actual.map(normalizeHeader).filter(Boolean));
+  const matched = expected.filter(header => present.has(normalizeHeader(header))).length;
+
+  return matched / expected.length;
+}
+
 /* ------------------------------------------------------------------ *
  * 2. Analyse CSV (RFC 4180 : guillemets, virgules et sauts de ligne)
  * ------------------------------------------------------------------ */
@@ -280,6 +335,14 @@ export function normalizeEmail(email: string): string {
  * Mot de passe / Password / Code, etc. Le mot de passe ainsi lu est en clair :
  * il est destine a etre hache immediatement par le serveur.
  */
+/**
+ * Debut d'une empreinte scrypt, tel que le produit `hashPassword`.
+ *
+ * C'est ce qui permet de tenir le secret dans une seule colonne : ce qui
+ * commence ainsi est deja hache, le reste est un mot de passe en clair.
+ */
+export const HASH_PREFIX = 'scrypt$';
+
 export function mapUserAccount(row: Record<string, string>): UserAccount | null {
   const email = normalizeEmail(
     pick(row, 'email', 'adresse email', 'mail', 'e-mail', 'courriel'),
@@ -290,14 +353,32 @@ export function mapUserAccount(row: Record<string, string>): UserAccount | null 
     pick(row, 'name', 'nom', 'nom complet', 'full name', 'prenom nom', 'participant') ||
     email.split('@')[0].replace(/[._-]+/g, ' ');
 
+  // Une seule cellule porte le secret, et son contenu se reconnait de
+  // lui-meme : une empreinte commence par « scrypt$ », tout le reste est un
+  // mot de passe en clair qu'un organisateur a saisi avant la fusion. Le
+  // serveur le hache des sa lecture et remplace la cellule par l'empreinte,
+  // ce qui fait disparaitre le mot de passe en clair du classeur.
+  const secret = pick(
+    row,
+    'empreinte',
+    'hash',
+    'mot de passe',
+    'password',
+    'motdepasse',
+    'code',
+    'code acces',
+    "code d'acces",
+    'pin',
+  );
+  const looksHashed = secret.startsWith(HASH_PREFIX);
+
   return {
     email,
     name,
     role: parseRole(pick(row, 'role', 'profil', 'fonction', 'type', 'categorie')),
     status: parseStatus(pick(row, 'status', 'statut', 'etat', 'actif', 'validation')),
-    password:
-      pick(row, 'mot de passe', 'password', 'motdepasse', 'code', 'code acces', "code d'acces", 'pin') ||
-      undefined,
+    password: looksHashed ? undefined : secret || undefined,
+    passwordHash: looksHashed ? secret : undefined,
     institution:
       pick(row, 'institution', 'organisation', 'structure', 'entreprise', 'universite', 'affiliation') ||
       undefined,
@@ -306,7 +387,26 @@ export function mapUserAccount(row: Record<string, string>): UserAccount | null 
     avatarUrl: pick(row, 'avatar', 'avatar url', 'photo', 'photo url', 'image') || undefined,
     assignedBy: pick(row, 'assigned by', 'attribue par', 'admin') || undefined,
     assignedAt: pick(row, 'assigned at', 'date attribution', 'horodateur', 'timestamp') || undefined,
+    country: pick(row, 'pays', 'country') || undefined,
+    city: pick(row, 'ville', 'city') || undefined,
+    bio: pick(row, 'bio', 'biographie', 'presentation', 'a propos') || undefined,
+    phone: pick(row, 'telephone', 'phone', 'tel', 'whatsapp') || undefined,
+    linkedin: pick(row, 'linkedin', 'linked in', 'profil linkedin', 'reseau') || undefined,
+    interests: splitList(
+      pick(row, 'interets', "centres d'interet", 'interests', 'tags', 'thematiques'),
+    ),
   };
+}
+
+/**
+ * Decoupe une liste saisie a la main. Les organisateurs separent selon leur
+ * habitude : point-virgule, virgule ou barre verticale sont tous acceptes.
+ */
+export function splitList(value: string): string[] {
+  return value
+    .split(/[;,|]/)
+    .map(item => item.trim())
+    .filter(Boolean);
 }
 
 /** Convertit toute une table en liste de comptes (les lignes invalides sont ignorees). */

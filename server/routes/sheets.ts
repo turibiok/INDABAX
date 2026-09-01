@@ -9,7 +9,27 @@ import {
   updateSheetsConfig,
 } from '../store';
 import { AuthedRequest, requireAuth, requireCapability, updateSessionsForEmail } from '../sessions';
-import { readTab, SheetError, writeRows } from '../sheetsGateway';
+import {
+  expectedHeadersFor,
+  forgetResolvedTabs,
+  readTab,
+  SheetError,
+  TabKind,
+  writeRows,
+} from '../sheetsGateway';
+import { forgetSocialCache } from '../social';
+
+/**
+ * Oublie tout ce qui a ete deduit du classeur precedent.
+ *
+ * Les onglets sont retrouves a leur gid, mis en cache : renommer un onglet ou
+ * changer de classeur sans vider ce cache ferait lire l'ancien emplacement.
+ * Les annonces et les messages sont dans le meme cas.
+ */
+function forgetSheetDerivedState(): void {
+  forgetResolvedTabs();
+  forgetSocialCache();
+}
 
 export const sheetsRouter = Router();
 
@@ -26,7 +46,14 @@ sheetsRouter.get('/config', (_req, res) => {
   res.json({ config: getPublicSheetsConfig(), bootstrapNeeded: !getSheetsConfig().isLinked });
 });
 
-const TAB_FIELDS = ['usersTab', 'participantsTab', 'sessionsTab', 'checkInsTab', 'feedbacksTab'] as const;
+const TAB_FIELDS = [
+  'profilesTab',
+  'sessionsTab',
+  'checkInsTab',
+  'feedbacksTab',
+  'announcementsTab',
+  'messagesTab',
+] as const;
 
 /** Modifie la configuration : reserve aux roles habilites. */
 sheetsRouter.put('/config', requireCapability('canManageIntegrations'), (req: AuthedRequest, res) => {
@@ -46,6 +73,7 @@ sheetsRouter.put('/config', requireCapability('canManageIntegrations'), (req: Au
   }
 
   updateSheetsConfig(patch);
+  forgetSheetDerivedState();
   res.json({ config: getPublicSheetsConfig() });
 });
 
@@ -64,17 +92,20 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
     return res.status(400).json({ error: 'Lien Google Sheets invalide ou identifiant introuvable.' });
   }
 
-  const usersTab =
-    typeof req.body?.usersTab === 'string' && req.body.usersTab.trim()
-      ? req.body.usersTab.trim()
-      : getSheetsConfig().usersTab;
+  const profilesTab =
+    typeof req.body?.profilesTab === 'string' && req.body.profilesTab.trim()
+      ? req.body.profilesTab.trim()
+      : getSheetsConfig().profilesTab;
 
   // On teste avant d'enregistrer `isLinked`, pour ne jamais marquer comme
   // reliee une configuration qui ne fonctionne pas.
-  const candidate = { ...getSheetsConfig(), masterSheetUrl: sheetUrl, usersTab };
+  const candidate = { ...getSheetsConfig(), masterSheetUrl: sheetUrl, profilesTab };
+
+  // Le classeur change : ce qui avait ete deduit du precedent ne vaut plus.
+  forgetSheetDerivedState();
 
   try {
-    const table = await readTab(usersTab, candidate);
+    const table = await readTab(profilesTab, candidate, expectedHeadersFor('profiles'));
     const accounts = mapUserAccounts(table);
 
     if (accounts.length === 0) {
@@ -82,14 +113,14 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
       // une table sans colonne Email signale souvent un nom d'onglet errone.
       updateSheetsConfig({
         masterSheetUrl: sheetUrl,
-        usersTab,
+        profilesTab,
         isLinked: false,
-        lastError: `Aucune colonne « Email » exploitable dans l'onglet « ${usersTab} ».`,
+        lastError: `Aucune colonne « Email » exploitable dans l'onglet « ${profilesTab} ».`,
       });
 
       return res.status(422).json({
         error:
-          `Aucune colonne « Email » exploitable dans l'onglet « ${usersTab} ». ` +
+          `Aucune colonne « Email » exploitable dans l'onglet « ${profilesTab} ». ` +
           `Vérifiez l'orthographe exacte du nom de l'onglet, puis ses colonnes. ` +
           `Colonnes lues : ${table.headers.filter(Boolean).join(', ') || 'aucune'}.`,
         reason: 'no_accounts',
@@ -98,7 +129,7 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
 
     updateSheetsConfig({
       masterSheetUrl: sheetUrl,
-      usersTab,
+      profilesTab,
       isLinked: true,
       lastSyncTimestamp: new Date().toISOString(),
       lastError: undefined,
@@ -119,10 +150,10 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
       config: getPublicSheetsConfig(),
       accounts: accounts.length,
       sessionsUpdated,
-      message: `Classeur lié : ${accounts.length} compte(s) détecté(s) dans l'onglet « ${usersTab} ».`,
+      message: `Classeur lié : ${accounts.length} compte(s) détecté(s) dans l'onglet « ${profilesTab} ».`,
     });
   } catch (error: any) {
-    updateSheetsConfig({ masterSheetUrl: sheetUrl, usersTab, isLinked: false, lastError: error.message });
+    updateSheetsConfig({ masterSheetUrl: sheetUrl, profilesTab, isLinked: false, lastError: error.message });
 
     const status = error instanceof SheetError ? error.status : 500;
     res.status(status).json({ error: error.message, reason: error instanceof SheetError ? error.reason : 'unknown' });
@@ -131,6 +162,7 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
 
 sheetsRouter.post('/unlink', requireCapability('canManageIntegrations'), (_req, res) => {
   updateSheetsConfig({ isLinked: false, lastError: undefined });
+  forgetSheetDerivedState();
   res.json({ config: getPublicSheetsConfig() });
 });
 
@@ -138,7 +170,13 @@ sheetsRouter.post('/unlink', requireCapability('canManageIntegrations'), (_req, 
  * Lecture des donnees
  * ------------------------------------------------------------------ */
 
-const READABLE_TABS = ['participants', 'sessions', 'announcements'] as const;
+const READABLE_TABS = ['participants', 'sessions'] as const;
+
+/** Categorie d'onglet correspondante, pour reconnaitre l'onglet a ses colonnes. */
+const KIND_MAP: Record<ReadableTab, TabKind> = {
+  participants: 'profiles',
+  sessions: 'sessions',
+};
 type ReadableTab = (typeof READABLE_TABS)[number];
 
 function tabNameFor(kind: ReadableTab): string {
@@ -146,11 +184,9 @@ function tabNameFor(kind: ReadableTab): string {
 
   switch (kind) {
     case 'participants':
-      return config.participantsTab;
+      return config.profilesTab;
     case 'sessions':
       return config.sessionsTab;
-    case 'announcements':
-      return 'Annonces';
   }
 }
 
@@ -166,7 +202,7 @@ sheetsRouter.get('/data/:kind', requireAuth, async (req: AuthedRequest, res) => 
   }
 
   try {
-    const table = await readTab(tabNameFor(kind));
+    const table = await readTab(tabNameFor(kind), undefined, expectedHeadersFor(KIND_MAP[kind]));
     res.json({ headers: table.headers, rows: table.rows, count: table.rows.length });
   } catch (error: any) {
     const status = error instanceof SheetError ? error.status : 500;

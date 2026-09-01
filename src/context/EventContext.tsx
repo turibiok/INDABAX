@@ -12,6 +12,7 @@ import {
   ParticipantRole,
   DocLink,
   Announcement,
+  AnnouncementCategory,
   ChatChannel,
   ChatMessage,
   SpeakerResource,
@@ -24,9 +25,7 @@ import {
   INITIAL_PARTICIPANTS,
   INITIAL_CHECKINS,
   INITIAL_FEEDBACKS,
-  INITIAL_ANNOUNCEMENTS,
   INITIAL_CHANNELS,
-  INITIAL_CHAT_MESSAGES,
   INITIAL_SPEAKER_RESOURCES,
   INITIAL_VOLUNTEER_LOGS,
   INITIAL_EVENT_CONFIG
@@ -61,9 +60,13 @@ interface EventContextType {
   authWarning: string | null;
   isAuthenticating: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
+  /** Inscription : la personne choisit elle-même son mot de passe. */
+  registerWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Changement de son propre mot de passe : l'actuel est exigé. */
   changeMyPassword: (currentPassword: string, newPassword: string) => Promise<string>;
+  /** Change sa propre photo de profil. Une chaîne vide la retire. */
+  changeMyPhoto: (photo: string) => Promise<string>;
   /** Role reellement attribue au compte connecte. */
   realRole: ParticipantRole;
   /** Role effectivement applique a l'interface (previsualisation Super-Admin incluse). */
@@ -77,6 +80,8 @@ interface EventContextType {
   userAccounts: PublicUserAccount[];
   assignRole: (email: string, role: ParticipantRole, extra?: AssignRoleExtra) => Promise<string>;
   setAccountStatus: (email: string, status: PublicUserAccount['status']) => Promise<string>;
+  /** Réinitialisation par l'organisateur : le mot de passe est effacé. */
+  resetAccountPassword: (email: string) => Promise<string>;
   removeAccount: (email: string) => Promise<string>;
   refreshAccounts: () => Promise<void>;
   reloadAccountsFromSheet: () => Promise<string>;
@@ -87,7 +92,7 @@ interface EventContextType {
   saveSheetsSettings: (patch: SheetsSettingsPatch) => Promise<string>;
   isSheetsLinked: boolean;
   canWriteToSheets: boolean;
-  linkSheetsDatabase: (sheetUrl: string, usersTab?: string) => Promise<string>;
+  linkSheetsDatabase: (sheetUrl: string, profilesTab?: string) => Promise<string>;
   unlinkSheetsDatabase: () => Promise<string>;
   importFromSheets: (what: 'participants' | 'sessions') => Promise<string>;
   pushDataToSheets: () => Promise<string>;
@@ -179,7 +184,14 @@ interface EventContextType {
   addAnnouncementComment: (announcementId: string, content: string) => void;
 
   // Chat actions
-  sendChannelMessage: (channelId: string, content: string, attachmentUrl?: string, attachmentType?: 'image' | 'link' | 'code') => void;
+  sendChannelMessage: (channelId: string, content: string, attachmentUrl?: string) => Promise<void>;
+  /** Retire un message : le sien, ou celui d'un autre si le rôle le permet. */
+  retireChatMessage: (messageId: string) => Promise<void>;
+  /** Nombre de messages par fil, pour les compteurs des salons. */
+  threadCounts: Record<string, number>;
+  /** Raison du dernier échec de lecture ou d'écriture des publications. */
+  socialWarning: string | null;
+  refreshSocial: () => Promise<void>;
   sendDirectMessage: (receiverId: string, content: string) => void;
   reactToMessage: (messageId: string, emoji: string) => void;
 
@@ -194,33 +206,91 @@ interface EventContextType {
 export interface AssignRoleExtra {
   name?: string;
   status?: PublicUserAccount['status'];
-  /** Mot de passe choisi par l'administrateur. */
-  password?: string;
-  /** Demande au serveur d'en générer un, renvoyé une seule fois. */
-  generatePassword?: boolean;
   institution?: string;
   position?: string;
 }
 
 export interface SheetsSettingsPatch {
-  usersTab?: string;
-  participantsTab?: string;
+  profilesTab?: string;
   sessionsTab?: string;
   checkInsTab?: string;
   feedbacksTab?: string;
+  announcementsTab?: string;
+  messagesTab?: string;
   autoSync?: boolean;
   writeWebhookUrl?: string;
   appSheetAppId?: string;
   appSheetAccessKey?: string;
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Annonces et messages : conversions
+ *
+ * Les vues attendent les formes historiques `Announcement` et
+ * `ChatMessage`. Les convertir ici plutot que de les reecrire evite de
+ * toucher a l'affichage : le changement porte sur la provenance des
+ * donnees, pas sur ce qui est montre.
+ * ------------------------------------------------------------------ */
+
+/** Un salon « chan-general » se lit « canal:chan-general » dans le classeur. */
+export const threadForChannel = (channelId: string) => `canal:${channelId}`;
+
+/** Un commentaire sous une annonce se rattache a « annonce:<identifiant> ». */
+export const threadForAnnouncement = (announcementId: string) => `annonce:${announcementId}`;
+
+function toAnnouncement(item: api.ServerAnnouncement, myId: string): Announcement {
+  return {
+    id: item.id,
+    title: item.title,
+    content: item.content,
+    category: item.category as AnnouncementCategory,
+    // Le classeur ne tient qu'une categorie : l'urgence s'en deduit, ce qui
+    // evite une colonne de plus a maintenir a la main.
+    priority: item.category === 'URGENT' ? 'urgent' : 'normal',
+    authorName: item.authorName,
+    authorRole: item.authorRole,
+    authorAvatar: '',
+    timestamp: item.timestamp,
+    pinned: item.pinned,
+    likes: item.likes,
+    // Le serveur ne divulgue pas qui a aime : seulement si c'est le cas pour
+    // la personne connectee, ce qui suffit a l'affichage du bouton.
+    likedBy: item.likedByMe ? [myId] : [],
+    comments: item.comments.map(comment => ({
+      id: comment.id,
+      authorId: comment.authorEmail,
+      authorName: comment.authorName,
+      authorRole: comment.authorRole,
+      authorAvatar: '',
+      content: comment.content,
+      timestamp: comment.timestamp,
+    })),
+  };
+}
+
+function toChatMessage(item: api.ServerMessage): ChatMessage {
+  return {
+    id: item.id,
+    channelId: item.thread.startsWith('canal:') ? item.thread.slice('canal:'.length) : undefined,
+    senderId: item.authorEmail,
+    senderName: item.authorName,
+    senderRole: item.authorRole,
+    senderAvatar: '',
+    content: item.content,
+    timestamp: item.timestamp,
+    reactions: {},
+  };
+}
+
 const EMPTY_SHEETS_CONFIG: PublicSheetsConfig = {
   masterSheetUrl: '',
-  usersTab: 'Utilisateurs',
-  participantsTab: 'Participants',
+  profilesTab: 'Participants',
   sessionsTab: 'Sessions',
   checkInsTab: 'Check-ins',
   feedbacksTab: 'Feedbacks',
+  announcementsTab: 'Annonces',
+  messagesTab: 'Messages',
   isLinked: false,
   autoSync: true,
   canWrite: false,
@@ -267,10 +337,14 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : ['ses-101', 'ses-201', 'ses-202'];
   });
 
-  const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
-    const saved = localStorage.getItem('indabax_announcements');
-    return saved ? JSON.parse(saved) : INITIAL_ANNOUNCEMENTS;
-  });
+  /*
+   * Annonces et messages viennent du serveur, qui les tient dans le classeur.
+   * Ils etaient auparavant dans le localStorage de chaque navigateur : une
+   * annonce ne quittait donc jamais l'appareil de son auteur, et un salon de
+   * discussion etait un monologue. Rien n'est plus lu ni ecrit localement ici.
+   */
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [socialWarning, setSocialWarning] = useState<string | null>(null);
 
   const [channels, setChannels] = useState<ChatChannel[]>(() => {
     const saved = localStorage.getItem('indabax_channels');
@@ -282,10 +356,30 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : INITIAL_EVENT_CONFIG;
   });
 
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('indabax_chat_messages');
-    return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+  const [channelMessages, setChannelMessages] = useState<ChatMessage[]>([]);
+  const [threadCounts, setThreadCounts] = useState<Record<string, number>>({});
+
+  /*
+   * Les messages privés restent sur l'appareil qui les a écrits.
+   *
+   * Ce n'est pas un oubli : le classeur est la seule mémoire durable de
+   * l'application, et il est partagé avec toute l'équipe d'organisation. Y
+   * inscrire une conversation privée la rendrait lisible par des tiers, sans
+   * que ses deux auteurs le sachent. Tant qu'aucune mémoire réellement privée
+   * n'est disponible, mieux vaut une portée limitée qu'une confidentialité
+   * annoncée mais fausse.
+   */
+  const [directMessages, setDirectMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('indabax_direct_messages');
+    return saved ? JSON.parse(saved) : [];
   });
+
+  // Les salons viennent du serveur, les messages privés du navigateur : les
+  // vues n'ont pas à connaître cette différence.
+  const chatMessages = useMemo(
+    () => [...channelMessages, ...directMessages],
+    [channelMessages, directMessages],
+  );
 
   const [speakerResources, setSpeakerResources] = useState<SpeakerResource[]>(() => {
     const saved = localStorage.getItem('indabax_speaker_resources');
@@ -450,13 +544,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('indabax_saved_sessions', JSON.stringify(savedSessionIds));
   }, [savedSessionIds]);
 
-  useEffect(() => {
-    localStorage.setItem('indabax_announcements', JSON.stringify(announcements));
-  }, [announcements]);
+
 
   useEffect(() => {
-    localStorage.setItem('indabax_chat_messages', JSON.stringify(chatMessages));
-  }, [chatMessages]);
+    localStorage.setItem('indabax_direct_messages', JSON.stringify(directMessages));
+  }, [directMessages]);
 
   useEffect(() => {
     localStorage.setItem('indabax_speaker_resources', JSON.stringify(speakerResources));
@@ -815,6 +907,23 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const registerWithEmail = async (email: string, password: string) => {
+    setIsAuthenticating(true);
+    setAuthWarning(null);
+
+    try {
+      const payload = await api.register(email, password);
+      applyAuthPayload(payload);
+      setActiveTab(payload.capabilities.tabs[0] || 'schedule');
+
+      try {
+        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#f59e0b'] });
+      } catch (e) {}
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
   const signOut = async () => {
     try {
       await api.logout();
@@ -834,6 +943,29 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const changeMyPassword = async (currentPassword: string, newPassword: string): Promise<string> => {
     const result = await api.changePassword(currentPassword, newPassword);
     return result.message;
+  };
+
+  /**
+   * Change sa propre photo, ou la retire quand la valeur est vide.
+   *
+   * La fiche et l'annuaire sont mis à jour dans la foulée : sans cela, la
+   * nouvelle photo n'apparaîtrait qu'à la prochaine connexion, et la personne
+   * croirait que le changement a échoué.
+   */
+  const changeMyPhoto = async (photo: string): Promise<string> => {
+    const result = await api.updateMyPhoto(photo);
+    const next = result.profile?.avatarUrl || '';
+
+    setCurrentUser(prev => ({ ...prev, avatarUrl: next }));
+    setParticipants(prev =>
+      prev.map(item =>
+        normalizeEmail(item.email) === normalizeEmail(currentUser.email)
+          ? { ...item, avatarUrl: next }
+          : item,
+      ),
+    );
+
+    return result.warning ? `${result.message} ${result.warning}` : result.message;
   };
 
   /** Relit le role depuis le classeur : utile si l'admin vient de le changer. */
@@ -921,13 +1053,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ? ` ${result.sessionsUpdated} session(s) ouverte(s) mise(s) à jour immédiatement.`
         : '';
 
-    // Le mot de passe généré ne transite qu'une fois : il est affiché à
-    // l'administrateur pour qu'il le transmette, puis oublié.
-    const passwordNote = result.generatedPassword
-      ? ` Mot de passe à transmettre : ${result.generatedPassword}`
-      : result.passwordChanged
-        ? ' Mot de passe enregistré.'
-        : '';
+    // Aucun mot de passe n'est attribué : la personne choisit le sien en
+    // s'inscrivant, ce qu'il faut lui dire.
+    const passwordNote = result.needsRegistration
+      ? " Elle doit maintenant s'inscrire avec cet email pour choisir son mot de passe."
+      : '';
 
     return `Rôle « ${roleLabel} » attribué à ${cleanEmail}.${sessionNote}${passwordNote}`;
   };
@@ -950,6 +1080,20 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return status === 'suspended'
       ? `${cleanEmail} suspendu : ses sessions ouvertes ont été fermées.`
       : `Statut de ${cleanEmail} mis à jour.`;
+  };
+
+  const resetAccountPassword = async (email: string): Promise<string> => {
+    const cleanEmail = normalizeEmail(email);
+    const result = await api.clearAccountPassword(cleanEmail);
+
+    // Le compte redevient « à activer » : la liste doit le montrer.
+    setUserAccounts(prev =>
+      prev.map(account =>
+        normalizeEmail(account.email) === cleanEmail ? { ...account, hasPassword: false } : account,
+      ),
+    );
+
+    return result.message;
   };
 
   const removeAccount = async (email: string): Promise<string> => {
@@ -994,7 +1138,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const linkSheetsDatabase = async (sheetUrl: string, usersTab?: string): Promise<string> => {
+  const linkSheetsDatabase = async (sheetUrl: string, profilesTab?: string): Promise<string> => {
     const url = sheetUrl.trim();
     if (!url) {
       throw new Error('Renseignez le lien de partage du classeur Google Sheet.');
@@ -1002,7 +1146,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setIsSyncing(true);
     try {
-      const result = await api.linkSheet(url, usersTab);
+      const result = await api.linkSheet(url, profilesTab);
       setSheetsConfig(result.config);
       await refreshAccounts();
 
@@ -1037,7 +1181,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (what === 'participants') {
         const incoming = rowsToParticipants(data.rows);
         if (incoming.length === 0) {
-          return `L'onglet « ${sheetsConfig.participantsTab} » ne contient aucun participant exploitable.`;
+          return `L'onglet « ${sheetsConfig.profilesTab} » ne contient aucun participant exploitable.`;
         }
 
         let added = 0;
@@ -1228,86 +1372,127 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     downloadIcsFile(savedSessions.length > 0 ? savedSessions : sessions, "IndabaX_Benin_2026_Agenda_Complet");
   };
 
-  // Announcements Actions
-  const addAnnouncement = (announcementData: Omit<Announcement, 'id' | 'timestamp' | 'likes' | 'likedBy' | 'comments'>) => {
-    const newAnn: Announcement = {
-      ...announcementData,
-      id: `ann-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      likes: 0,
-      likedBy: [],
-      comments: []
-    };
-    setAnnouncements(prev => [newAnn, ...prev]);
+  /*
+   * Annonces, discussions et commentaires
+   *
+   * Tout passe par le serveur. Chaque action relit ensuite la liste : c'est
+   * une requete de plus, mais elle garantit que ce qui s'affiche est ce que
+   * le classeur contient, y compris les publications des autres arrivees
+   * entre-temps.
+   */
+
+  const refreshSocial = async () => {
+    if (authStatus !== 'authenticated') return;
+
+    try {
+      const [items, chat] = await Promise.all([api.fetchAnnouncements(), api.fetchMessages()]);
+      setAnnouncements(items.map(item => toAnnouncement(item, currentUser.id)));
+      setChannelMessages(chat.messages.map(toChatMessage));
+      setThreadCounts(chat.counts);
+      setSocialWarning(null);
+    } catch (error: any) {
+      // Une lecture qui echoue ne doit pas vider l'ecran : la liste
+      // precedente reste affichee, avec la raison de l'echec.
+      setSocialWarning(error?.message || 'Publications momentanement illisibles.');
+    }
+  };
+
+  /*
+   * Chargement à la connexion, puis relecture périodique.
+   *
+   * Sans cette relecture, une annonce publiée par un organisateur
+   * n'apparaîtrait aux autres qu'à leur prochaine ouverture de
+   * l'application — c'est-à-dire trop tard pour un changement de salle. Le
+   * pas est volontairement lent : le classeur est lu à travers Google, et
+   * l'affluence d'un événement se compte en centaines d'appareils.
+   */
+  useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      setAnnouncements([]);
+      setChannelMessages([]);
+      setThreadCounts({});
+      return;
+    }
+
+    refreshSocial();
+    const timer = window.setInterval(refreshSocial, 45_000);
+    return () => window.clearInterval(timer);
+  }, [authStatus, currentUser.id]);
+
+  const addAnnouncement = async (
+    announcementData: Omit<Announcement, 'id' | 'timestamp' | 'likes' | 'likedBy' | 'comments'>,
+  ) => {
+    const result = await api.publishAnnouncement({
+      title: announcementData.title,
+      content: announcementData.content,
+      category: announcementData.category,
+      pinned: announcementData.pinned,
+    });
+
+    // Apres la relecture : celle-ci remet l'avertissement a zero.
+    await refreshSocial();
+    if (result.warning) setSocialWarning(result.warning);
 
     try {
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.5 } });
     } catch (e) {}
   };
 
-  const likeAnnouncement = (announcementId: string) => {
-    setAnnouncements(prev => prev.map(ann => {
-      if (ann.id === announcementId) {
+  const likeAnnouncement = async (announcementId: string) => {
+    // Reponse immediate a l'ecran, corrigee par la relecture qui suit.
+    setAnnouncements(prev =>
+      prev.map(ann => {
+        if (ann.id !== announcementId) return ann;
         const isLiked = ann.likedBy.includes(currentUser.id);
         return {
           ...ann,
-          likes: isLiked ? ann.likes - 1 : ann.likes + 1,
-          likedBy: isLiked
-            ? ann.likedBy.filter(id => id !== currentUser.id)
-            : [...ann.likedBy, currentUser.id]
+          likes: Math.max(0, isLiked ? ann.likes - 1 : ann.likes + 1),
+          likedBy: isLiked ? [] : [currentUser.id],
         };
-      }
-      return ann;
-    }));
+      }),
+    );
+
+    try {
+      await api.likeAnnouncement(announcementId);
+    } finally {
+      await refreshSocial();
+    }
   };
 
-  const addAnnouncementComment = (announcementId: string, content: string) => {
+  const addAnnouncementComment = async (announcementId: string, content: string) => {
     if (!content.trim()) return;
-    const comment = {
-      id: `comm-${Date.now()}`,
-      authorId: currentUser.id,
-      authorName: currentUser.name,
-      authorRole: currentUser.role,
-      authorAvatar: currentUser.avatarUrl,
-      content,
-      timestamp: new Date().toISOString()
-    };
 
-    setAnnouncements(prev => prev.map(ann => {
-      if (ann.id === announcementId) {
-        return {
-          ...ann,
-          comments: [...ann.comments, comment]
-        };
-      }
-      return ann;
-    }));
+    await api.sendMessage(threadForAnnouncement(announcementId), content);
+    await refreshSocial();
   };
 
   // Chat Actions
-  const sendChannelMessage = (
-    channelId: string,
-    content: string,
-    attachmentUrl?: string,
-    attachmentType?: 'image' | 'link' | 'code'
-  ) => {
-    if (!content.trim() && !attachmentUrl) return;
+  /**
+   * Envoi dans un salon.
+   *
+   * Un lien partagé rejoint le corps du message plutôt qu'une colonne à part :
+   * le classeur garde ainsi une ligne par message, et le lien reste visible là
+   * où il a été écrit.
+   */
+  const sendChannelMessage = async (channelId: string, content: string, attachmentUrl?: string) => {
+    const body = [content.trim(), (attachmentUrl || '').trim()].filter(Boolean).join('\n');
+    if (!body) return;
 
-    const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      channelId,
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      senderRole: currentUser.role,
-      senderAvatar: currentUser.avatarUrl,
-      content,
-      timestamp: new Date().toISOString(),
-      reactions: {},
-      attachmentUrl,
-      attachmentType
-    };
+    const result = await api.sendMessage(threadForChannel(channelId), body);
+    await refreshSocial();
+    if (result.warning) setSocialWarning(result.warning);
+  };
 
-    setChatMessages(prev => [...prev, newMsg]);
+  /**
+   * Retrait d'un message.
+   *
+   * Le serveur tranche : chacun peut retirer le sien, retirer celui d'un autre
+   * demande la responsabilité du contenu. Le client ne fait que transmettre.
+   */
+  const retireChatMessage = async (messageId: string) => {
+    const result = await api.retireMessage(messageId);
+    await refreshSocial();
+    if (result.warning) setSocialWarning(result.warning);
   };
 
   const sendDirectMessage = (receiverId: string, content: string) => {
@@ -1332,11 +1517,18 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       reactions: {}
     };
 
-    setChatMessages(prev => [...prev, newMsg]);
+    setDirectMessages(prev => [...prev, newMsg]);
   };
 
+  /**
+   * Réaction à un message.
+   *
+   * Les réactions ne sont portées que par les messages privés, qui vivent dans
+   * ce navigateur. Sur un message de salon, elles disparaîtraient à la
+   * prochaine relecture du classeur : mieux vaut ne rien promettre.
+   */
   const reactToMessage = (messageId: string, emoji: string) => {
-    setChatMessages(prev => prev.map(m => {
+    setDirectMessages(prev => prev.map(m => {
       if (m.id === messageId) {
         const reactions = { ...(m.reactions || {}) };
         const users = reactions[emoji] || [];
@@ -1486,16 +1678,31 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Super-Admin Announcement CRUD
-  const updateAnnouncement = (announcementId: string, updated: Partial<Announcement>) => {
-    setAnnouncements(prev => prev.map(a => a.id === announcementId ? { ...a, ...updated } : a));
+  /**
+   * Modification d'une annonce publiée.
+   *
+   * Seul l'épinglage est repris par le serveur : le texte d'une annonce déjà
+   * diffusée n'est pas réécrit, car le classeur en garde la trace et parce
+   * qu'une annonce corrigée en silence est pire qu'une nouvelle annonce.
+   */
+  const updateAnnouncement = async (announcementId: string, updated: Partial<Announcement>) => {
+    if (typeof updated.pinned === 'boolean') {
+      await api.pinAnnouncement(announcementId, updated.pinned);
+      await refreshSocial();
+    }
   };
 
-  const deleteAnnouncement = (announcementId: string) => {
-    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+  const deleteAnnouncement = async (announcementId: string) => {
+    const result = await api.retireAnnouncement(announcementId);
+    await refreshSocial();
+    if (result.warning) setSocialWarning(result.warning);
   };
 
-  const togglePinAnnouncement = (announcementId: string) => {
-    setAnnouncements(prev => prev.map(a => a.id === announcementId ? { ...a, pinned: !a.pinned } : a));
+  const togglePinAnnouncement = async (announcementId: string) => {
+    const current = announcements.find(a => a.id === announcementId);
+    const result = await api.pinAnnouncement(announcementId, !current?.pinned);
+    await refreshSocial();
+    if (result.warning) setSocialWarning(result.warning);
   };
 
   // Super-Admin Chat Channel CRUD
@@ -1556,9 +1763,12 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Array.isArray(jsonData.participants)) setParticipants(jsonData.participants);
       if (Array.isArray(jsonData.checkIns)) setCheckIns(jsonData.checkIns);
       if (Array.isArray(jsonData.feedbacks)) setFeedbacks(jsonData.feedbacks);
-      if (Array.isArray(jsonData.announcements)) setAnnouncements(jsonData.announcements);
       if (Array.isArray(jsonData.channels)) setChannels(jsonData.channels);
-      if (Array.isArray(jsonData.chatMessages)) setChatMessages(jsonData.chatMessages);
+
+      // Les annonces et les messages de salon ne sont pas restaurés depuis une
+      // sauvegarde : ils appartiennent au classeur, qui en est la référence.
+      // Les réécrire ici les ferait apparaître puis disparaître à la première
+      // relecture, ce qui donnerait l'illusion d'une restauration.
       if (Array.isArray(jsonData.speakerResources)) setSpeakerResources(jsonData.speakerResources);
       if (Array.isArray(jsonData.volunteerLogs)) setVolunteerLogs(jsonData.volunteerLogs);
       if (jsonData.eventConfig) setEventConfig(jsonData.eventConfig);
@@ -1582,9 +1792,12 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setParticipants(INITIAL_PARTICIPANTS);
     setCheckIns(INITIAL_CHECKINS);
     setFeedbacks(INITIAL_FEEDBACKS);
-    setAnnouncements(INITIAL_ANNOUNCEMENTS);
     setChannels(INITIAL_CHANNELS);
-    setChatMessages(INITIAL_CHAT_MESSAGES);
+
+    // Annonces et salons viennent du classeur : la remise à zéro locale ne
+    // les touche pas. Seules les conversations privées de cet appareil
+    // s'effacent, puisqu'elles n'existent nulle part ailleurs.
+    setDirectMessages([]);
     setSpeakerResources(INITIAL_SPEAKER_RESOURCES);
     setVolunteerLogs(INITIAL_VOLUNTEER_LOGS);
     setEventConfig(INITIAL_EVENT_CONFIG);
@@ -1595,6 +1808,9 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.removeItem('indabax_participants');
     localStorage.removeItem('indabax_checkins');
     localStorage.removeItem('indabax_feedbacks');
+    localStorage.removeItem('indabax_direct_messages');
+    // Clés d'avant le passage au serveur : les retirer évite qu'un navigateur
+    // déjà utilisé conserve indéfiniment des publications qui n'existent plus.
     localStorage.removeItem('indabax_announcements');
     localStorage.removeItem('indabax_channels');
     localStorage.removeItem('indabax_chat_messages');
@@ -1663,8 +1879,10 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       authWarning,
       isAuthenticating,
       signInWithEmail,
+      registerWithEmail,
       signOut,
       changeMyPassword,
+      changeMyPhoto,
       realRole,
       effectiveRole,
       capabilities,
@@ -1674,6 +1892,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       userAccounts,
       assignRole,
       setAccountStatus,
+      resetAccountPassword,
       removeAccount,
       refreshAccounts,
       reloadAccountsFromSheet,
@@ -1748,6 +1967,10 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       likeAnnouncement,
       addAnnouncementComment,
       sendChannelMessage,
+      retireChatMessage,
+      threadCounts,
+      socialWarning,
+      refreshSocial,
       sendDirectMessage,
       reactToMessage,
       addSpeakerResource,

@@ -80,11 +80,12 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
   // Brouillons : on n'ecrit sur le serveur que lorsque l'utilisateur valide.
   const [sheetUrlDraft, setSheetUrlDraft] = useState(sheetsConfig.masterSheetUrl);
   const [tabsDraft, setTabsDraft] = useState({
-    usersTab: sheetsConfig.usersTab,
-    participantsTab: sheetsConfig.participantsTab,
+    profilesTab: sheetsConfig.profilesTab,
     sessionsTab: sheetsConfig.sessionsTab,
     checkInsTab: sheetsConfig.checkInsTab,
     feedbacksTab: sheetsConfig.feedbacksTab,
+    announcementsTab: sheetsConfig.announcementsTab,
+    messagesTab: sheetsConfig.messagesTab,
   });
   const [secretsDraft, setSecretsDraft] = useState({
     writeWebhookUrl: '',
@@ -324,8 +325,9 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {(
                   [
-                    ['usersTab', 'Onglet comptes'],
-                    ['participantsTab', 'Onglet participants'],
+                    ['profilesTab', 'Onglet participants'],
+                    ['announcementsTab', 'Onglet annonces'],
+                    ['messagesTab', 'Onglet messages'],
                     ['sessionsTab', 'Onglet sessions'],
                     ['checkInsTab', 'Onglet présences'],
                     ['feedbacksTab', 'Onglet feedbacks'],
@@ -368,7 +370,7 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                 <>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => run(() => linkSheetsDatabase(sheetUrlDraft, tabsDraft.usersTab))}
+                      onClick={() => run(() => linkSheetsDatabase(sheetUrlDraft, tabsDraft.profilesTab))}
                       disabled={isSyncing || !sheetUrlDraft.trim()}
                       className="flex-1 min-w-[180px] py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
                     >

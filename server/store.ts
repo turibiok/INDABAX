@@ -20,11 +20,12 @@ const STATE_FILE = path.join(DATA_DIR, 'server-state.json');
 /** Configuration du classeur, secrets d'ecriture inclus. */
 export interface ServerSheetsConfig {
   masterSheetUrl: string;
-  usersTab: string;
-  participantsTab: string;
+  profilesTab: string;
   sessionsTab: string;
   checkInsTab: string;
   feedbacksTab: string;
+  announcementsTab: string;
+  messagesTab: string;
   /** Secret : ne quitte jamais le serveur. */
   writeWebhookUrl: string;
   /** Secret : ne quitte jamais le serveur. */
@@ -46,11 +47,12 @@ interface ServerState {
 
 export const DEFAULT_SERVER_SHEETS_CONFIG: ServerSheetsConfig = {
   masterSheetUrl: '',
-  usersTab: 'Utilisateurs',
-  participantsTab: 'Participants',
+  profilesTab: 'Participants',
   sessionsTab: 'Sessions',
   checkInsTab: 'Check-ins',
   feedbacksTab: 'Feedbacks',
+  announcementsTab: 'Annonces',
+  messagesTab: 'Messages',
   writeWebhookUrl: '',
   appSheetAppId: '',
   appSheetAccessKey: '',
@@ -69,11 +71,26 @@ function readStateFromDisk(): ServerState {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
     const parsed = JSON.parse(raw) as Partial<ServerState>;
 
+    // Fusion avec les valeurs par defaut : un fichier ecrit par une version
+    // anterieure peut ne pas contenir tous les champs.
+    const sheets = { ...DEFAULT_SERVER_SHEETS_CONFIG, ...(parsed.sheets || {}) };
+
+    // Les onglets des comptes et de l'annuaire n'en font plus qu'un. Un etat
+    // enregistre avant la fusion nomme encore les deux : reprendre le nom
+    // choisi par l'organisateur evite de repartir sur « Participants » alors
+    // que son onglet s'appelle autrement.
+    const ancien = (parsed.sheets || {}) as Record<string, unknown>;
+    if (!ancien.profilesTab) {
+      const repris = ancien.participantsTab || ancien.usersTab;
+      if (typeof repris === 'string' && repris.trim()) {
+        sheets.profilesTab = repris.trim();
+        console.log(`Onglet des profils repris de la configuration précédente : « ${sheets.profilesTab} ».`);
+      }
+    }
+
     return {
       version: 1,
-      // Fusion avec les valeurs par defaut : un fichier ecrit par une version
-      // anterieure peut ne pas contenir tous les champs.
-      sheets: { ...DEFAULT_SERVER_SHEETS_CONFIG, ...(parsed.sheets || {}) },
+      sheets,
       accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
     };
   } catch (error: any) {
@@ -136,8 +153,16 @@ function applyEnvSheetConfig() {
   }
 
   const tabs: [keyof ServerSheetsConfig, string | undefined][] = [
-    ['usersTab', process.env.SHEET_USERS_TAB],
-    ['participantsTab', process.env.SHEET_PARTICIPANTS_TAB],
+    // Les deux anciens noms restent acceptés : un déploiement en place ne
+    // doit pas cesser de trouver son onglet à cause de la fusion.
+    [
+      'profilesTab',
+      process.env.SHEET_PROFILES_TAB ||
+        process.env.SHEET_PARTICIPANTS_TAB ||
+        process.env.SHEET_USERS_TAB,
+    ],
+    ['announcementsTab', process.env.SHEET_ANNOUNCEMENTS_TAB],
+    ['messagesTab', process.env.SHEET_MESSAGES_TAB],
     ['sessionsTab', process.env.SHEET_SESSIONS_TAB],
     ['checkInsTab', process.env.SHEET_CHECKINS_TAB],
     ['feedbacksTab', process.env.SHEET_FEEDBACKS_TAB],
@@ -188,7 +213,7 @@ export async function verifyConfiguredSheet(
     const accounts = await readUsers();
 
     if (accounts.length === 0) {
-      const error = `L'onglet « ${state.sheets.usersTab} » ne contient aucun email exploitable.`;
+      const error = `L'onglet « ${state.sheets.profilesTab} » ne contient aucun email exploitable.`;
       state.sheets = { ...state.sheets, isLinked: false, lastError: error };
       writeStateToDisk();
       return { linked: false, accounts: 0, error };
@@ -228,8 +253,7 @@ export function updateSheetsConfig(patch: Partial<ServerSheetsConfig>): ServerSh
 /** Vue publique : sans les secrets d'ecriture. */
 export interface PublicSheetsConfig {
   masterSheetUrl: string;
-  usersTab: string;
-  participantsTab: string;
+  profilesTab: string;
   sessionsTab: string;
   checkInsTab: string;
   feedbacksTab: string;
@@ -250,8 +274,7 @@ export function getPublicSheetsConfig(): PublicSheetsConfig {
 
   return {
     masterSheetUrl: config.masterSheetUrl,
-    usersTab: config.usersTab,
-    participantsTab: config.participantsTab,
+    profilesTab: config.profilesTab,
     sessionsTab: config.sessionsTab,
     checkInsTab: config.checkInsTab,
     feedbacksTab: config.feedbacksTab,
@@ -321,11 +344,37 @@ export function upsertAccount(input: {
     avatarUrl: input.avatarUrl ?? existing?.avatarUrl,
     assignedBy: input.assignedBy ?? existing?.assignedBy,
     assignedAt: new Date().toISOString(),
+    // Le reste du profil vient du classeur et n'est pas modifiable ici : il
+    // doit survivre a une inscription ou a un changement de role, sans quoi
+    // s'inscrire effacerait sa propre fiche.
+    country: existing?.country,
+    city: existing?.city,
+    bio: existing?.bio,
+    phone: existing?.phone,
+    linkedin: existing?.linkedin,
+    interests: existing?.interests,
   };
 
   state.accounts = [account, ...state.accounts.filter(item => normalizeEmail(item.email) !== email)];
   writeStateToDisk();
   return account;
+}
+
+/**
+ * Change la photo d'un compte existant. Une chaîne vide l'efface.
+ *
+ * Renvoie `false` si le compte n'est pas dans la table du serveur, ce qui
+ * arrive pour un compte lu du classeur et jamais encore enregistré : l'appelant
+ * doit alors l'y placer d'abord.
+ */
+export function setAvatar(email: string, avatarUrl: string): boolean {
+  const clean = normalizeEmail(email);
+  const account = state.accounts.find(item => normalizeEmail(item.email) === clean);
+  if (!account) return false;
+
+  account.avatarUrl = avatarUrl || undefined;
+  writeStateToDisk();
+  return true;
 }
 
 /** Remplace l'empreinte du mot de passe d'un compte existant. */
@@ -335,6 +384,24 @@ export function setPasswordHash(email: string, passwordHash: string): boolean {
   if (!account) return false;
 
   account.passwordHash = passwordHash;
+  delete account.password;
+  writeStateToDisk();
+  return true;
+}
+
+/**
+ * Efface le mot de passe d'un compte : il redevient « à activer ».
+ *
+ * C'est la réinitialisation par l'organisateur. La personne choisit ensuite
+ * elle-même un nouveau mot de passe via l'inscription, sans que personne
+ * n'ait eu à en connaître un.
+ */
+export function clearPassword(email: string): boolean {
+  const clean = normalizeEmail(email);
+  const account = state.accounts.find(item => normalizeEmail(item.email) === clean);
+  if (!account) return false;
+
+  delete account.passwordHash;
   delete account.password;
   writeStateToDisk();
   return true;
@@ -362,17 +429,31 @@ export function removeAccount(email: string): boolean {
  */
 export async function replaceAccounts(incoming: UserAccount[]): Promise<number> {
   const merged: UserAccount[] = [];
+  const seen = new Set<string>();
 
   for (const account of incoming) {
     const email = normalizeEmail(account.email);
     const existing = findAccount(email);
     const { password, ...rest } = account;
 
+    seen.add(email);
     merged.push({
       ...rest,
       email,
       passwordHash: password ? await hashPassword(password) : existing?.passwordHash,
     });
+  }
+
+  // Le compte administrateur décrit par l'environnement survit au remplacement.
+  //
+  // Sans cela, lier un classeur qui ne contient pas cet email l'effacerait de
+  // la table, et la personne qui vient de configurer l'application perdrait
+  // son accès au rechargement suivant — précisément au moment où elle en a le
+  // plus besoin.
+  const provisionedEmail = normalizeEmail(process.env.SUPERADMIN_EMAIL || '');
+  if (provisionedEmail && !seen.has(provisionedEmail)) {
+    const provisioned = findAccount(provisionedEmail);
+    if (provisioned) merged.push(provisioned);
   }
 
   state.accounts = merged;
@@ -419,7 +500,15 @@ export async function ensureSuperAdmin(): Promise<
     return { created: false, reason: 'not_configured' };
   }
 
-  if (findAccount(email)) {
+  const existing = findAccount(email);
+
+  // Un compte de démonstration ne doit pas masquer le compte configuré : en
+  // développement, l'amorçage s'exécute avant ce provisionnement, et l'email
+  // choisi peut se trouver dans les données de démo. Sans cette exception, le
+  // mot de passe du fichier .env serait silencieusement ignoré.
+  const isDemoSeed = existing?.assignedBy === 'Amorcage initial';
+
+  if (existing && !isDemoSeed) {
     return { created: false, reason: 'already_exists' };
   }
 

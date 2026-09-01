@@ -1,6 +1,8 @@
 import {
   buildCsvUrl,
+  buildHtmlViewUrl,
   extractGid,
+  extractGidsFromHtml,
   extractSpreadsheetId,
   isAllowedGoogleUrl,
   mapUserAccounts,
@@ -8,9 +10,12 @@ import {
   parseCsv,
   parseRole,
   parseStatus,
+  parseTabRef,
+  scoreHeaders,
   toTable,
 } from './sheets';
 import { SHEET_TEMPLATES, templateToCsv } from '../data/sheetTemplates';
+import { scriptIsOutdated } from '../../server/sheetsGateway';
 
 let passed = 0;
 let failed = 0;
@@ -150,6 +155,15 @@ for (const template of SHEET_TEMPLATES) {
     table.headers,
     template.headers.map(normalizeHeader),
   );
+
+  // Une ligne d'exemple plus courte que ses en-tetes decalerait tout ce qui
+  // la suit dans le CSV telecharge par les organisateurs. C'est arrive en
+  // ajoutant une colonne sans completer les exemples.
+  check(
+    `${template.tab} : lignes d exemple alignees sur les en-tetes`,
+    template.rows.filter(row => row.length !== template.headers.length).length,
+    0,
+  );
   check(`${template.tab} : ${template.rows.length} ligne(s) relues`, table.rows.length, template.rows.length);
 
   for (const required of template.requiredColumns) {
@@ -159,16 +173,24 @@ for (const template of SHEET_TEMPLATES) {
   }
 }
 
-console.log('\n--- Le modele Utilisateurs produit des comptes exploitables ---');
+console.log('\n--- Le modele Participants produit des comptes exploitables ---');
 
-const usersTemplate = SHEET_TEMPLATES.find(t => t.tab === 'Utilisateurs')!;
-const templateAccounts = mapUserAccounts(toTable(parseCsv(templateToCsv(usersTemplate))));
+const profilesTemplate = SHEET_TEMPLATES.find(t => t.tab === 'Participants')!;
+const templateAccounts = mapUserAccounts(toTable(parseCsv(templateToCsv(profilesTemplate))));
 
-check('tous les comptes du modele sont reconnus', templateAccounts.length, usersTemplate.rows.length);
+check('tous les comptes du modele sont reconnus', templateAccounts.length, profilesTemplate.rows.length);
+
+// Le modele livre des empreintes vides : chaque personne choisit son mot de
+// passe elle-meme. Aucun secret ne doit donc sortir de cette lecture.
 check(
-  'chaque compte a un mot de passe',
-  templateAccounts.filter(account => account.password).length,
-  usersTemplate.rows.length,
+  'aucun mot de passe ni empreinte dans le modele',
+  templateAccounts.filter(account => account.password || account.passwordHash).length,
+  0,
+);
+check(
+  'les informations de profil accompagnent le compte',
+  templateAccounts.filter(a => a.city && a.country && a.interests && a.interests.length > 0).length,
+  profilesTemplate.rows.length,
 );
 check(
   'les six roles du modele sont couverts',
@@ -180,5 +202,130 @@ check(
   templateAccounts.filter(account => account.status === 'pending').length,
   1,
 );
+/* ------------------------------------------------------------------ *
+ * Adressage des onglets.
+ *
+ * Sur un classeur simplement partage par lien, Google ignore le parametre
+ * `sheet=` et renvoie toujours l'onglet par defaut. Un onglet doit donc
+ * pouvoir etre designe par son gid, et reconnu a ses colonnes.
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- parseTabRef ---');
+check('nom d onglet', parseTabRef('Utilisateurs'), { tab: 'Utilisateurs' });
+check('gid numerique', parseTabRef('644285085'), { gid: '644285085' });
+check(
+  'URL d onglet collee',
+  parseTabRef('https://docs.google.com/spreadsheets/d/ABC/edit#gid=934049423'),
+  { gid: '934049423' },
+);
+check('espaces autour du gid', parseTabRef('  771029365  '), { gid: '771029365' });
+check('nom contenant des chiffres', parseTabRef('Salle 2'), { tab: 'Salle 2' });
+
+console.log('\n--- extractGidsFromHtml ---');
+check(
+  'gid extraits et dedoublonnes',
+  extractGidsFromHtml(
+    '<a href="?gid=644285085">x</a><a href="#gid=771029365">y</a><a href="?gid=644285085">z</a>',
+  ),
+  ['644285085', '771029365'],
+);
+check('aucun gid', extractGidsFromHtml('<html><body>rien</body></html>'), []);
+
+console.log('\n--- buildHtmlViewUrl ---');
+check(
+  'URL de la page des onglets',
+  buildHtmlViewUrl('ID1'),
+  'https://docs.google.com/spreadsheets/d/ID1/htmlview',
+);
+
+console.log('\n--- scoreHeaders ---');
+const headersOf = (tab: string) => SHEET_TEMPLATES.find(t => t.tab === tab)!.headers;
+
+const PROFILS = headersOf('Participants');
+const ANNONCES = headersOf('Annonces');
+const MESSAGES = headersOf('Messages');
+
+check('un onglet se reconnait a lui-meme', scoreHeaders(PROFILS, PROFILS), 1);
+
+/*
+ * La paire a risque du classeur : Annonces et Messages tiennent tous deux un
+ * identifiant, un horodateur, un auteur, son email, son role, un message, un
+ * indicateur de retrait et une colonne de reactions. Huit colonnes communes
+ * sur les onze attendues pour Annonces : au-dessus d'un seuil naif, ce qui
+ * justifie le seuil d'acceptation eleve (0,85) cote serveur. Sans lui, une
+ * lecture des annonces pourrait rendre le fil des messages.
+ */
+check('recouvrement mesure entre Annonces et Messages', scoreHeaders(MESSAGES, ANNONCES), 8 / 11);
+check(
+  'ce recouvrement reste sous le seuil d acceptation par le nom',
+  scoreHeaders(MESSAGES, ANNONCES) < 0.85,
+  true,
+);
+check(
+  'le bon onglet devance toujours les autres',
+  scoreHeaders(ANNONCES, ANNONCES) > scoreHeaders(MESSAGES, ANNONCES),
+  true,
+);
+check(
+  'et le classement tranche dans l autre sens aussi',
+  scoreHeaders(MESSAGES, MESSAGES) > scoreHeaders(ANNONCES, MESSAGES),
+  true,
+);
+check('accents et casse ignores', scoreHeaders(['EMAIL', 'Rôle'], ['email', 'role']), 1);
+check('colonnes absentes', scoreHeaders([], PROFILS), 0);
+check('attente vide', scoreHeaders(PROFILS, []), 0);
+
+/*
+ * Cas reel qui a motive la correction : le classeur renvoyait son premier
+ * onglet, alors nomme Participants, quand l application demandait
+ * Utilisateurs. Les deux onglets sont depuis fusionnes, mais le classement
+ * doit continuer a trancher entre deux tables qui se ressemblent.
+ */
+const ONGLET_RENVOYE = ['ID', 'Billet', 'Nom', 'Email', 'Role', 'Institution', 'Poste', 'Pays', 'Ville', 'Interets'];
+
+check(
+  'un onglet incomplet n est pas accepte sur son nom',
+  scoreHeaders(ONGLET_RENVOYE, PROFILS) < 0.85,
+  true,
+);
+check(
+  'et l onglet complet le devance',
+  scoreHeaders(PROFILS, PROFILS) > scoreHeaders(ONGLET_RENVOYE, PROFILS),
+  true,
+);
+check(
+  'le programme ne peut pas passer pour l annuaire',
+  scoreHeaders(headersOf('Sessions'), PROFILS) < 0.5,
+  true,
+);
+/* ------------------------------------------------------------------ *
+ * Un Apps Script trop ancien doit etre reconnu.
+ *
+ * La version anterieure ignore la colonne cle et ajoute toujours une ligne :
+ * une empreinte ou une photo iraient dans une ligne neuve, a cote du profil,
+ * et le classeur se remplirait de doublons a chaque inscription. Elle se
+ * reconnait a sa reponse, qui ne compte ni les ajouts ni les mises a jour.
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- scriptIsOutdated ---');
+
+const ANCIEN = { ok: true, written: 1 };
+const NOUVEAU_MAJ = { ok: true, written: 1, added: 0, updated: 1 };
+const NOUVEAU_AJOUT = { ok: true, written: 1, added: 1, updated: 0 };
+
+check('ancien script, mise a jour demandee', scriptIsOutdated(ANCIEN, 'Email'), true);
+check('ancien script, simple ajout', scriptIsOutdated(ANCIEN, undefined), false);
+check('nouveau script qui met a jour', scriptIsOutdated(NOUVEAU_MAJ, 'Email'), false);
+check('nouveau script qui ajoute', scriptIsOutdated(NOUVEAU_AJOUT, 'Email'), false);
+check('nouveau script, simple ajout', scriptIsOutdated(NOUVEAU_MAJ, undefined), false);
+
+// Un compteur a zero est une information, pas une absence : le distinguer de
+// `undefined` est tout l'interet de la verification.
+check(
+  'zero mise a jour reste une reponse valide',
+  scriptIsOutdated({ ok: true, updated: 0 }, 'Email'),
+  false,
+);
+
 console.log(`\n=== ${passed} reussis, ${failed} echoues ===`);
 if (failed > 0) process.exit(1);

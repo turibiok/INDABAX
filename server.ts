@@ -5,6 +5,8 @@ import dotenv from "dotenv";
 import { authRouter } from "./server/routes/auth";
 import { sheetsRouter } from "./server/routes/sheets";
 import { aiRouter } from "./server/routes/ai";
+import { socialRouter } from "./server/routes/social";
+import { warmSocialCache } from "./server/social";
 import {
   ensureSuperAdmin,
   getBootstrapAdminEmails,
@@ -13,8 +15,9 @@ import {
   verifyConfiguredSheet,
 } from "./server/store";
 import { mapUserAccounts } from "./src/lib/sheets";
-import { readTab } from "./server/sheetsGateway";
+import { expectedHeadersFor, readTab } from "./server/sheetsGateway";
 import { isCookieSecure, sessionCount, startSessionSweeper } from "./server/sessions";
+import { startTokenSweeper } from "./server/resetTokens";
 
 dotenv.config();
 
@@ -42,10 +45,12 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/sheets", sheetsRouter);
 app.use("/api/ai", aiRouter);
+app.use("/api/social", socialRouter);
 
 async function startServer() {
   await initStore();
   startSessionSweeper();
+  startTokenSweeper();
 
   // Compte super-admin decrit dans l'environnement.
   const provisioned = await ensureSuperAdmin();
@@ -93,21 +98,27 @@ async function startServer() {
 
   if (sheets.masterSheetUrl.trim() && !sheets.isLinked) {
     const result = await verifyConfiguredSheet(async () =>
-      mapUserAccounts(await readTab(getSheetsConfig().usersTab)),
+      mapUserAccounts(
+        await readTab(getSheetsConfig().profilesTab, undefined, expectedHeadersFor("profiles")),
+      ),
     );
 
     console.log(
       result.linked
-        ? `Classeur Google Sheet lié : ${result.accounts} compte(s) chargé(s) depuis l'onglet « ${sheets.usersTab} ».`
+        ? `Classeur Google Sheet lié : ${result.accounts} compte(s) chargé(s) depuis l'onglet « ${sheets.profilesTab} ».`
         : `Classeur configuré mais illisible : ${result.error}`,
     );
   } else {
     console.log(
       sheets.isLinked
-        ? `Classeur Google Sheet lié, onglet des comptes « ${sheets.usersTab} ».`
+        ? `Classeur Google Sheet lié, onglet des comptes « ${sheets.profilesTab} ».`
         : "Aucun classeur lié : connectez-vous puis renseignez le lien dans l'espace Super-Admin.",
     );
   }
+
+  // Les annonces et les messages sont relus une première fois maintenant : le
+  // premier visiteur n'attend donc pas la lecture du classeur.
+  await warmSocialCache();
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
