@@ -324,6 +324,32 @@ export async function sendEmail(input: {
   return { sent: true };
 }
 
+/** Réponse du Apps Script à une écriture, telle qu'elle est interprétée. */
+export interface ScriptWriteReply {
+  ok?: boolean;
+  written?: number;
+  error?: string;
+  sheet?: string;
+  created?: boolean;
+  /* Renseignés par la version du script qui sait mettre une ligne à jour. */
+  added?: number;
+  updated?: number;
+}
+
+/**
+ * Dit si le script déployé est trop ancien pour la mise à jour demandée.
+ *
+ * Une version antérieure ignore `keyColumn` et ajoute toujours une ligne : une
+ * empreinte ou une photo partiraient dans une ligne neuve, à côté du profil de
+ * la personne, et le classeur se remplirait de doublons à chaque inscription
+ * sans que rien ne le signale. Le script se reconnaît à sa réponse : lui seul
+ * renseigne `added` et `updated`.
+ */
+export function scriptIsOutdated(reply: ScriptWriteReply, keyColumn?: string): boolean {
+  if (!keyColumn) return false;
+  return reply.updated === undefined && reply.added === undefined;
+}
+
 export interface WriteOptions {
   /**
    * Colonne servant de cle. Quand elle est fournie, une ligne dont la cle
@@ -400,13 +426,7 @@ export async function writeRows(
       );
     }
 
-    let parsed: {
-      ok?: boolean;
-      written?: number;
-      error?: string;
-      sheet?: string;
-      created?: boolean;
-    } | null = null;
+    let parsed: ScriptWriteReply | null = null;
     try {
       parsed = JSON.parse(body);
     } catch {
@@ -422,6 +442,17 @@ export async function writeRows(
         `Le Apps Script a signalé un échec : ${parsed?.error || body.slice(0, 200)}`,
         502,
         'webhook_error',
+      );
+    }
+
+    if (scriptIsOutdated(parsed, options.keyColumn)) {
+      throw new SheetError(
+        "Le Apps Script déployé ne sait pas mettre une ligne à jour : il en ajoute une. " +
+          "Remplacez-le par la version fournie par l'application (Base Google Sheet › Écriture), " +
+          'puis redéployez-le. Une ligne en trop a pu être ajoutée dans l’onglet des profils : ' +
+          'vérifiez-la.',
+        409,
+        'script_outdated',
       );
     }
 

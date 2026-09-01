@@ -15,6 +15,7 @@ import {
   toTable,
 } from './sheets';
 import { SHEET_TEMPLATES, templateToCsv } from '../data/sheetTemplates';
+import { scriptIsOutdated } from '../../server/sheetsGateway';
 
 let passed = 0;
 let failed = 0;
@@ -297,5 +298,34 @@ check(
   scoreHeaders(headersOf('Sessions'), PROFILS) < 0.5,
   true,
 );
+/* ------------------------------------------------------------------ *
+ * Un Apps Script trop ancien doit etre reconnu.
+ *
+ * La version anterieure ignore la colonne cle et ajoute toujours une ligne :
+ * une empreinte ou une photo iraient dans une ligne neuve, a cote du profil,
+ * et le classeur se remplirait de doublons a chaque inscription. Elle se
+ * reconnait a sa reponse, qui ne compte ni les ajouts ni les mises a jour.
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- scriptIsOutdated ---');
+
+const ANCIEN = { ok: true, written: 1 };
+const NOUVEAU_MAJ = { ok: true, written: 1, added: 0, updated: 1 };
+const NOUVEAU_AJOUT = { ok: true, written: 1, added: 1, updated: 0 };
+
+check('ancien script, mise a jour demandee', scriptIsOutdated(ANCIEN, 'Email'), true);
+check('ancien script, simple ajout', scriptIsOutdated(ANCIEN, undefined), false);
+check('nouveau script qui met a jour', scriptIsOutdated(NOUVEAU_MAJ, 'Email'), false);
+check('nouveau script qui ajoute', scriptIsOutdated(NOUVEAU_AJOUT, 'Email'), false);
+check('nouveau script, simple ajout', scriptIsOutdated(NOUVEAU_MAJ, undefined), false);
+
+// Un compteur a zero est une information, pas une absence : le distinguer de
+// `undefined` est tout l'interet de la verification.
+check(
+  'zero mise a jour reste une reponse valide',
+  scriptIsOutdated({ ok: true, updated: 0 }, 'Email'),
+  false,
+);
+
 console.log(`\n=== ${passed} reussis, ${failed} echoues ===`);
 if (failed > 0) process.exit(1);
