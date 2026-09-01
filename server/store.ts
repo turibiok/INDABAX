@@ -257,6 +257,8 @@ export interface PublicSheetsConfig {
   sessionsTab: string;
   checkInsTab: string;
   feedbacksTab: string;
+  announcementsTab: string;
+  messagesTab: string;
   isLinked: boolean;
   autoSync: boolean;
   lastSyncTimestamp?: string;
@@ -276,6 +278,8 @@ export function getPublicSheetsConfig(): PublicSheetsConfig {
     masterSheetUrl: config.masterSheetUrl,
     profilesTab: config.profilesTab,
     sessionsTab: config.sessionsTab,
+    announcementsTab: config.announcementsTab,
+    messagesTab: config.messagesTab,
     checkInsTab: config.checkInsTab,
     feedbacksTab: config.feedbacksTab,
     isLinked: config.isLinked,
