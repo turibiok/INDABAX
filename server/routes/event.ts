@@ -24,6 +24,19 @@ import { EventRole } from '../../src/types';
  */
 export const eventRouter = Router();
 
+/** Mise en forme unique de la configuration renvoyee, pour les quatre routes. */
+function enveloppe(config: ReturnType<typeof getEventConfig>) {
+  return {
+    identity: config.identity,
+    settings: config.settings,
+    collections: config.collections,
+    terminology: config.terminology,
+    branding: config.branding,
+    roles: config.roles,
+    fromSheet: config.fromSheet,
+  };
+}
+
 function repondreErreur(res: any, error: unknown) {
   if (error instanceof SheetError) {
     return res.status(error.status).json({ error: error.message, reason: error.reason });
@@ -38,13 +51,7 @@ eventRouter.get('/config', (_req, res) => {
   const config = getEventConfig();
 
   res.json({
-    config: {
-      identity: config.identity,
-      terminology: config.terminology,
-      branding: config.branding,
-      roles: config.roles,
-      fromSheet: config.fromSheet,
-    },
+    config: enveloppe(config),
   });
 });
 
@@ -56,13 +63,7 @@ eventRouter.post(
     try {
       const { config, avertissements } = await reloadEventConfig();
       res.json({
-        config: {
-          identity: config.identity,
-          terminology: config.terminology,
-          branding: config.branding,
-          roles: config.roles,
-          fromSheet: config.fromSheet,
-        },
+        config: enveloppe(config),
         warnings: avertissements,
         message: config.fromSheet
           ? 'Configuration relue depuis le classeur.'
@@ -84,18 +85,14 @@ eventRouter.put(
     try {
       const config = await saveEventConfig({
         identity: corps.identity,
+        settings: corps.settings,
+        collections: corps.collections,
         terminology: corps.terminology,
         branding: corps.branding,
       });
 
       res.json({
-        config: {
-          identity: config.identity,
-          terminology: config.terminology,
-          branding: config.branding,
-          roles: config.roles,
-          fromSheet: config.fromSheet,
-        },
+        config: enveloppe(config),
         message: 'Configuration enregistrée dans le classeur.',
       });
     } catch (error) {
@@ -121,13 +118,7 @@ eventRouter.put('/roles', requireCapability('canManageRoles'), async (req: Authe
     const { config, avertissements } = await saveRoles(roles);
 
     res.json({
-      config: {
-        identity: config.identity,
-        terminology: config.terminology,
-        branding: config.branding,
-        roles: config.roles,
-        fromSheet: config.fromSheet,
-      },
+      config: enveloppe(config),
       warnings: avertissements,
       message: 'Rôles enregistrés dans le classeur.',
     });

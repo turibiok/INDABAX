@@ -7,6 +7,7 @@ import {
   SessionFeedback,
 } from '../types';
 import { RoleCapabilities } from '../permissions';
+import { DocLink, EventBranding, EventRole, EventTerminology, RoomConfig } from '../types';
 
 /**
  * Client HTTP de l'API de l'application.
@@ -223,6 +224,81 @@ export function linkSheet(
 export async function unlinkSheet(): Promise<PublicSheetsConfig> {
   const data = await request<{ config: PublicSheetsConfig }>('/api/sheets/unlink', { method: 'POST' });
   return data.config;
+}
+
+/* ------------------------------------------------------------------ *
+ * Configuration de l'événement
+ * ------------------------------------------------------------------ */
+
+/**
+ * Identité, vocabulaire, apparence et rôles de l'événement.
+ *
+ * Servie par le serveur depuis le classeur : c'est elle, et non une constante
+ * du code, qui décide du nom affiché, des mots employés et des droits de
+ * chacun.
+ */
+export interface RemoteEventConfig {
+  identity: {
+    eventName: string;
+    edition: string;
+    startDate: string;
+    endDate: string;
+    location: string;
+    venueAddress: string;
+    themeDescription: string;
+    contactEmail: string;
+    websiteUrl: string;
+    twitterHandle: string;
+    linkedinUrl: string;
+  };
+  settings: {
+    allowExpressRegistration: boolean;
+    maintenanceMode: boolean;
+    enableAnonymousFeedback: boolean;
+    autoSyncGoogleSheets: boolean;
+    sessionReminderMinutes: number;
+  };
+  collections: {
+    rooms: RoomConfig[];
+    tracks: string[];
+    docLinks: DocLink[];
+  };
+  terminology: EventTerminology;
+  branding: EventBranding;
+  roles: EventRole[];
+  /** Vrai quand elle vient du classeur, faux quand ce sont les valeurs livrées. */
+  fromSheet: boolean;
+}
+
+/** Lisible sans session : l'écran de connexion en a besoin. */
+export async function fetchEventConfig(): Promise<RemoteEventConfig> {
+  const data = await request<{ config: RemoteEventConfig }>('/api/event/config');
+  return data.config;
+}
+
+export async function saveEventConfig(patch: {
+  identity?: Partial<RemoteEventConfig['identity']>;
+  settings?: Partial<RemoteEventConfig['settings']>;
+  collections?: Partial<RemoteEventConfig['collections']>;
+  terminology?: Partial<EventTerminology>;
+  branding?: Partial<EventBranding>;
+}): Promise<{ config: RemoteEventConfig; message: string }> {
+  return request('/api/event/config', { method: 'PUT', body: patch });
+}
+
+export async function saveEventRoles(
+  roles: EventRole[],
+): Promise<{ config: RemoteEventConfig; warnings: string[]; message: string }> {
+  return request('/api/event/roles', { method: 'PUT', body: { roles } });
+}
+
+/** Relit le classeur, pour prendre en compte une modification faite à la main. */
+export async function reloadEventConfig(): Promise<{
+  config: RemoteEventConfig;
+  warnings: string[];
+  message: string;
+}> {
+  return request('/api/event/config/reload', { method: 'POST' });
 }
 
 /* ------------------------------------------------------------------ *

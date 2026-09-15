@@ -18,7 +18,8 @@ import {
   SpeakerResource,
   VolunteerLog,
   PushNotificationAlert,
-  EventConfig
+  EventConfig,
+  EventRole,
 } from '../types';
 import {
   INITIAL_SESSIONS,
@@ -34,7 +35,7 @@ import { syncSessionToGoogle, downloadIcsFile } from '../services/calendarServic
 import { notificationService } from '../services/notificationService';
 import { rowsToParticipants, rowsToSessions } from '../services/sheetsDb';
 import * as api from '../services/api';
-import { RoleCapabilities, capabilitiesFor, labelForRole } from '../permissions';
+import { RoleCapabilities, capabilitiesFor, labelForRole, setActiveRoles } from '../permissions';
 import { normalizeEmail } from '../lib/sheets';
 
 interface EventContextType {
@@ -130,7 +131,19 @@ interface EventContextType {
 
   // Event Configuration & Super Admin
   eventConfig: EventConfig;
-  updateEventConfig: (updated: Partial<EventConfig>) => void;
+  /** Vrai tant que la configuration du serveur n'est pas arrivée. */
+  eventConfigLoading: boolean;
+  /**
+   * Enregistre une modification dans le classeur.
+   *
+   * Asynchrone parce qu'elle y va vraiment : l'appelant reçoit le verdict et
+   * peut l'afficher, au lieu de croire enregistré ce qui n'a pas quitté l'écran.
+   */
+  updateEventConfig: (updated: Partial<EventConfig>) => Promise<{ success: boolean; message: string }>;
+  /** Remplace la table des rôles. Réservé à qui peut gérer les rôles. */
+  updateEventRoles: (roles: EventRole[]) => Promise<{ success: boolean; message: string }>;
+  /** Relit la configuration du classeur, après une modification faite à la main. */
+  reloadEventConfigFromSheet: () => Promise<{ success: boolean; message: string }>;
 
   // Announcements & Discussions
   announcements: Announcement[];
@@ -353,10 +366,23 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : INITIAL_CHANNELS;
   });
 
+  /*
+   * La configuration vient du serveur, qui la lit dans le classeur. Ce qui est
+   * gardé dans le navigateur n'en est qu'un écho : il évite que le nom de
+   * l'événement et le logo apparaissent une fraction de seconde après le reste.
+   * Il est écrasé dès la réponse du serveur, et ne fait jamais autorité.
+   */
   const [eventConfig, setEventConfig] = useState<EventConfig>(() => {
-    const saved = localStorage.getItem('indabax_event_config');
-    return saved ? JSON.parse(saved) : INITIAL_EVENT_CONFIG;
+    try {
+      const echo = localStorage.getItem('indabax_event_config');
+      return echo ? { ...INITIAL_EVENT_CONFIG, ...JSON.parse(echo) } : INITIAL_EVENT_CONFIG;
+    } catch {
+      return INITIAL_EVENT_CONFIG;
+    }
   });
+
+  /** Vrai tant que la configuration du serveur n'est pas arrivée. */
+  const [eventConfigLoading, setEventConfigLoading] = useState(true);
 
   const [channelMessages, setChannelMessages] = useState<ChatMessage[]>([]);
   const [threadCounts, setThreadCounts] = useState<Record<string, number>>({});
@@ -567,6 +593,51 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem('indabax_event_config', JSON.stringify(eventConfig));
   }, [eventConfig]);
+
+  /**
+   * Applique une configuration reçue du serveur.
+   *
+   * La table des rôles est installée par `setActiveRoles` avant tout rendu :
+   * `capabilitiesFor` est appelée partout, y compris dans des composants qui
+   * n'ont pas accès à ce contexte, et servirait sinon les rôles livrés au lieu
+   * de ceux de l'événement.
+   */
+  const appliquerConfigDistante = React.useCallback((distante: api.RemoteEventConfig) => {
+    setActiveRoles(distante.roles);
+
+    setEventConfig(prev => ({
+      ...prev,
+      ...distante.identity,
+      ...distante.settings,
+      ...distante.collections,
+      roles: distante.roles,
+      terminology: distante.terminology,
+      branding: distante.branding,
+    }));
+  }, []);
+
+  // Chargée une fois au démarrage, sans attendre de session : l'écran de
+  // connexion affiche déjà le nom de l'événement et son logo.
+  useEffect(() => {
+    let abandonne = false;
+
+    api
+      .fetchEventConfig()
+      .then(distante => {
+        if (!abandonne) appliquerConfigDistante(distante);
+      })
+      .catch(() => {
+        // Serveur injoignable : l'écho du navigateur, ou les valeurs livrées,
+        // permettent au moins d'afficher l'écran de connexion.
+      })
+      .finally(() => {
+        if (!abandonne) setEventConfigLoading(false);
+      });
+
+    return () => {
+      abandonne = true;
+    };
+  }, [appliquerConfigDistante]);
 
   // La configuration du classeur, les comptes et la session ne sont plus
   // persistes dans le navigateur : le serveur en est le seul detenteur.
@@ -1660,8 +1731,97 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Super-Admin Configuration Update
-  const updateEventConfig = (updated: Partial<EventConfig>) => {
+  /**
+   * Modifie la configuration de l'evenement.
+   *
+   * L'affichage change tout de suite, l'enregistrement suit : une sauvegarde
+   * dans un classeur distant prend une seconde, et faire attendre l'organisateur
+   * devant un formulaire figé pour ça serait pénible. En cas d'échec, l'ancienne
+   * valeur est rétablie et le message dit pourquoi — plutôt qu'un écran qui
+   * affiche une chose et un classeur qui en contient une autre.
+   */
+  const updateEventConfig = async (
+    updated: Partial<EventConfig>,
+  ): Promise<{ success: boolean; message: string }> => {
+    const precedent = eventConfig;
     setEventConfig(prev => ({ ...prev, ...updated }));
+
+    // Chaque champ rejoint le volet que le serveur attend.
+    const identity: Record<string, unknown> = {};
+    const settings: Record<string, unknown> = {};
+    const collections: Record<string, unknown> = {};
+
+    const VOLET_IDENTITE = [
+      'eventName', 'edition', 'startDate', 'endDate', 'location', 'venueAddress',
+      'themeDescription', 'contactEmail', 'websiteUrl', 'twitterHandle', 'linkedinUrl',
+    ];
+    const VOLET_REGLAGES = [
+      'allowExpressRegistration', 'maintenanceMode', 'enableAnonymousFeedback',
+      'autoSyncGoogleSheets', 'sessionReminderMinutes',
+    ];
+    const VOLET_LISTES = ['rooms', 'tracks', 'docLinks'];
+
+    for (const [cle, valeur] of Object.entries(updated)) {
+      if (VOLET_IDENTITE.includes(cle)) identity[cle] = valeur;
+      else if (VOLET_REGLAGES.includes(cle)) settings[cle] = valeur;
+      else if (VOLET_LISTES.includes(cle)) collections[cle] = valeur;
+    }
+
+    const patch = {
+      ...(Object.keys(identity).length ? { identity } : {}),
+      ...(Object.keys(settings).length ? { settings } : {}),
+      ...(Object.keys(collections).length ? { collections } : {}),
+      ...(updated.terminology ? { terminology: updated.terminology } : {}),
+      ...(updated.branding ? { branding: updated.branding } : {}),
+    };
+
+    if (Object.keys(patch).length === 0) return { success: true, message: 'Rien à enregistrer.' };
+
+    try {
+      const { config, message } = await api.saveEventConfig(patch as never);
+      appliquerConfigDistante(config);
+      return { success: true, message };
+    } catch (error) {
+      // L'écran revient à ce qu'il montrait : afficher une valeur que le
+      // classeur ne contient pas serait pire que l'échec lui-même.
+      setEventConfig(precedent);
+      return {
+        success: false,
+        message:
+          error instanceof Error
+            ? `Configuration non enregistrée : ${error.message}`
+            : 'Configuration non enregistrée.',
+      };
+    }
+  };
+
+  /** Remplace la table des roles de l'evenement. */
+  const updateEventRoles = async (roles: EventRole[]) => {
+    try {
+      const { config, warnings, message } = await api.saveEventRoles(roles);
+      appliquerConfigDistante(config);
+      return { success: true, message: warnings.length > 0 ? warnings.join(' ') : message };
+    } catch (error) {
+      return {
+        success: false,
+        message:
+          error instanceof Error ? `Rôles non enregistrés : ${error.message}` : 'Rôles non enregistrés.',
+      };
+    }
+  };
+
+  /** Relit la configuration, apres une modification faite a la main. */
+  const reloadEventConfigFromSheet = async () => {
+    try {
+      const { config, warnings, message } = await api.reloadEventConfig();
+      appliquerConfigDistante(config);
+      return { success: warnings.length === 0, message: warnings.length > 0 ? warnings.join(' ') : message };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Relecture impossible.',
+      };
+    }
   };
 
   // Super-Admin Session CRUD
@@ -1968,7 +2128,10 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       isImportModalOpen,
       setIsImportModalOpen,
       eventConfig,
+      eventConfigLoading,
       updateEventConfig,
+      updateEventRoles,
+      reloadEventConfigFromSheet,
       announcements,
       channels,
       chatMessages,

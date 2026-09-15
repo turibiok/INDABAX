@@ -21,10 +21,12 @@ import {
 import {
   AppTab,
   DashboardKind,
+  DocLink,
   EventBranding,
   EventRole,
   EventTerminology,
   RoleAccent,
+  RoomConfig,
 } from '../src/types';
 import { readTab, SheetError, writeRows } from './sheetsGateway';
 import { getSheetsConfig } from './store';
@@ -40,10 +42,35 @@ export interface EventIdentity {
   themeDescription: string;
   contactEmail: string;
   websiteUrl: string;
+  twitterHandle: string;
+  linkedinUrl: string;
+}
+
+/**
+ * Reglages de fonctionnement.
+ *
+ * Ils changent ce que l'application autorise, pas ce qu'elle affiche : ils
+ * meritaient donc d'etre distingues de l'identite.
+ */
+export interface EventSettings {
+  allowExpressRegistration: boolean;
+  maintenanceMode: boolean;
+  enableAnonymousFeedback: boolean;
+  autoSyncGoogleSheets: boolean;
+  sessionReminderMinutes: number;
+}
+
+/** Listes attachees a l'evenement : salles, thematiques, documents publies. */
+export interface EventCollections {
+  rooms: RoomConfig[];
+  tracks: string[];
+  docLinks: DocLink[];
 }
 
 export interface ServerEventConfig {
   identity: EventIdentity;
+  settings: EventSettings;
+  collections: EventCollections;
   terminology: EventTerminology;
   branding: EventBranding;
   roles: EventRole[];
@@ -73,7 +100,19 @@ const IDENTITE_PAR_DEFAUT: EventIdentity = {
   themeDescription: '',
   contactEmail: '',
   websiteUrl: '',
+  twitterHandle: '',
+  linkedinUrl: '',
 };
+
+const REGLAGES_PAR_DEFAUT: EventSettings = {
+  allowExpressRegistration: true,
+  maintenanceMode: false,
+  enableAnonymousFeedback: true,
+  autoSyncGoogleSheets: true,
+  sessionReminderMinutes: 15,
+};
+
+const LISTES_PAR_DEFAUT: EventCollections = { rooms: [], tracks: [], docLinks: [] };
 
 const APPARENCE_PAR_DEFAUT: EventBranding = {
   logoUrl: '',
@@ -108,6 +147,8 @@ const TEINTES: RoleAccent[] = [
 
 let courante: ServerEventConfig = {
   identity: { ...IDENTITE_PAR_DEFAUT },
+  settings: { ...REGLAGES_PAR_DEFAUT },
+  collections: { ...LISTES_PAR_DEFAUT },
   terminology: { ...DEFAULT_TERMINOLOGY },
   branding: { ...APPARENCE_PAR_DEFAUT },
   roles: DEFAULT_ROLES,
@@ -305,9 +346,41 @@ const CLES_APPARENCE: (keyof EventBranding)[] = [
   'accentColor',
 ];
 
+/** Reglages booleens, et leur cle dans la feuille. */
+const CLES_REGLAGES_BOOLEENS: (keyof EventSettings)[] = [
+  'allowExpressRegistration',
+  'maintenanceMode',
+  'enableAnonymousFeedback',
+  'autoSyncGoogleSheets',
+];
+
+/** Listes ecrites en JSON, faute de pouvoir tenir sur une cellule autrement. */
+const CLES_LISTES: (keyof EventCollections)[] = ['rooms', 'tracks', 'docLinks'];
+
+/**
+ * Lit une liste ecrite en JSON.
+ *
+ * Une cellule illisible laisse la liste precedente plutot que de la vider : une
+ * accolade oubliee dans le classeur ne doit pas faire disparaitre toutes les
+ * salles de l'evenement.
+ */
+function versListe<T>(valeur: string, repli: T[]): T[] {
+  const brut = (valeur || '').trim();
+  if (!brut) return repli;
+
+  try {
+    const lu = JSON.parse(brut);
+    return Array.isArray(lu) ? (lu as T[]) : repli;
+  } catch {
+    return repli;
+  }
+}
+
 /** Construit identite, vocabulaire et apparence depuis les lignes clé / valeur. */
 export function configDepuisLignes(lignes: Record<string, string>[]): {
   identity: EventIdentity;
+  settings: EventSettings;
+  collections: EventCollections;
   terminology: EventTerminology;
   branding: EventBranding;
 } {
@@ -339,12 +412,28 @@ export function configDepuisLignes(lignes: Record<string, string>[]): {
     if (valeur) terminology[mot] = valeur;
   }
 
-  return { identity, terminology, branding };
+  const settings = { ...REGLAGES_PAR_DEFAUT };
+  for (const cle of CLES_REGLAGES_BOOLEENS) {
+    const valeur = lire(cle);
+    if (valeur) (settings[cle] as boolean) = versBooleen(valeur);
+  }
+
+  const minutes = Number(lire('sessionReminderMinutes'));
+  if (Number.isFinite(minutes) && minutes >= 0) settings.sessionReminderMinutes = minutes;
+
+  const collections = { ...LISTES_PAR_DEFAUT };
+  for (const cle of CLES_LISTES) {
+    (collections[cle] as unknown[]) = versListe(lire(cle), LISTES_PAR_DEFAUT[cle] as unknown[]);
+  }
+
+  return { identity, settings, collections, terminology, branding };
 }
 
 /** Transforme identite, vocabulaire et apparence en lignes clé / valeur. */
 export function configVersLignes(config: {
   identity: EventIdentity;
+  settings: EventSettings;
+  collections: EventCollections;
   terminology: EventTerminology;
   branding: EventBranding;
 }): Record<string, string>[] {
@@ -358,6 +447,18 @@ export function configVersLignes(config: {
   }
   for (const mot of Object.keys(config.terminology) as (keyof EventTerminology)[]) {
     lignes.push({ 'Clé': `term.${mot}`, Valeur: config.terminology[mot] || '' });
+  }
+
+  for (const cle of CLES_REGLAGES_BOOLEENS) {
+    lignes.push({ 'Clé': cle, Valeur: config.settings[cle] ? 'oui' : 'non' });
+  }
+  lignes.push({
+    'Clé': 'sessionReminderMinutes',
+    Valeur: String(config.settings.sessionReminderMinutes),
+  });
+
+  for (const cle of CLES_LISTES) {
+    lignes.push({ 'Clé': cle, Valeur: JSON.stringify(config.collections[cle] || []) });
   }
 
   return lignes;
@@ -387,6 +488,8 @@ export async function reloadEventConfig(): Promise<{
   }
 
   let identity = { ...IDENTITE_PAR_DEFAUT };
+  let settings = { ...REGLAGES_PAR_DEFAUT };
+  let collections = { ...LISTES_PAR_DEFAUT };
   let terminology = { ...DEFAULT_TERMINOLOGY };
   let branding = { ...APPARENCE_PAR_DEFAUT };
   let roles = DEFAULT_ROLES;
@@ -396,6 +499,8 @@ export async function reloadEventConfig(): Promise<{
     const table = await readTab(ONGLET_CONFIG, sheets, ['Clé', 'Valeur']);
     const lu = configDepuisLignes(table.rows);
     identity = lu.identity;
+    settings = lu.settings;
+    collections = lu.collections;
     terminology = lu.terminology;
     branding = lu.branding;
     trouve = true;
@@ -419,6 +524,8 @@ export async function reloadEventConfig(): Promise<{
 
   courante = {
     identity,
+    settings,
+    collections,
     terminology,
     branding,
     roles,
@@ -458,11 +565,15 @@ export function getEventConfig(): ServerEventConfig {
 /** Enregistre l'identite, le vocabulaire et l'apparence dans le classeur. */
 export async function saveEventConfig(patch: {
   identity?: Partial<EventIdentity>;
+  settings?: Partial<EventSettings>;
+  collections?: Partial<EventCollections>;
   terminology?: Partial<EventTerminology>;
   branding?: Partial<EventBranding>;
 }): Promise<ServerEventConfig> {
   const fusionne = {
     identity: { ...courante.identity, ...(patch.identity || {}) },
+    settings: { ...courante.settings, ...(patch.settings || {}) },
+    collections: { ...courante.collections, ...(patch.collections || {}) },
     terminology: { ...courante.terminology, ...(patch.terminology || {}) },
     branding: { ...courante.branding, ...(patch.branding || {}) },
   };

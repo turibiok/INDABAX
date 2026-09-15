@@ -221,15 +221,56 @@ console.log('\n--- configDepuisLignes ---');
 }
 
 {
+  const vide = configDepuisLignes([]);
+
   const lignes = configVersLignes({
-    identity: { ...configDepuisLignes([]).identity, eventName: 'Forum' },
+    identity: { ...vide.identity, eventName: 'Forum' },
+    settings: { ...vide.settings, maintenanceMode: true, sessionReminderMinutes: 45 },
+    collections: {
+      rooms: [{ id: 'r1', name: 'Grande salle', capacity: 120, locationNotes: '', hasStream: false }],
+      tracks: ['Robotique', 'Éthique'],
+      docLinks: [],
+    },
     terminology: { ...DEFAULT_TERMINOLOGY, session: 'atelier' },
-    branding: configDepuisLignes([]).branding,
+    branding: vide.branding,
   });
 
   const relu = configDepuisLignes(lignes);
   check('aller-retour : le nom tient', relu.identity.eventName, 'Forum');
   check('aller-retour : le mot tient', relu.terminology.session, 'atelier');
+  check('aller-retour : le reglage booleen tient', relu.settings.maintenanceMode, true);
+  check('aller-retour : le nombre tient', relu.settings.sessionReminderMinutes, 45);
+  check('aller-retour : les salles tiennent', relu.collections.rooms.length, 1);
+  check('aller-retour : la salle garde son nom', relu.collections.rooms[0]?.name, 'Grande salle');
+  check('aller-retour : les thematiques tiennent', relu.collections.tracks, ['Robotique', 'Éthique']);
+}
+
+console.log('\n--- reglages et listes : tolerance ---');
+
+{
+  const { settings } = configDepuisLignes([
+    { 'Clé': 'maintenanceMode', Valeur: 'OUI' },
+    { 'Clé': 'sessionReminderMinutes', Valeur: '30' },
+  ]);
+  check('un reglage ecrit en majuscules est lu', settings.maintenanceMode, true);
+  check('le nombre est lu', settings.sessionReminderMinutes, 30);
+  check('un reglage non cite garde sa valeur', settings.enableAnonymousFeedback, true);
+}
+
+{
+  // Une accolade oubliee dans le classeur ne doit pas faire disparaitre toutes
+  // les salles de l'evenement : mieux vaut ignorer la cellule.
+  const { collections } = configDepuisLignes([
+    { 'Clé': 'rooms', Valeur: '[{"id":"r1",' },
+  ]);
+  check('une liste illisible ne vide rien', collections.rooms, []);
+}
+
+{
+  const { settings } = configDepuisLignes([
+    { 'Clé': 'sessionReminderMinutes', Valeur: 'bientôt' },
+  ]);
+  check('un nombre illisible garde la valeur par defaut', settings.sessionReminderMinutes, 15);
 }
 
 console.log(`\n=== ${reussis} reussis, ${echoues} echoues ===`);
