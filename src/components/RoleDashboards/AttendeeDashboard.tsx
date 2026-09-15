@@ -29,8 +29,7 @@ export const AttendeeDashboard: React.FC = () => {
     feedbacks, 
     syncAllSavedSessionsToGoogleCalendar, 
     downloadAllSavedSessionsIcs,
-    setActiveTab
-  } = useEvent();
+    setActiveTab, eventLabel, term, eventConfig } = useEvent();
 
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -67,7 +66,7 @@ export const AttendeeDashboard: React.FC = () => {
               <Sparkles size={20} className="text-white" />
             </span>
             <span className="text-xs font-bold tracking-wider uppercase text-amber-100">
-              Espace Participant • IndabaX Bénin 2026
+              Espace Participant • {eventLabel}
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Bienvenue, {currentUser.name} !</h1>
@@ -199,7 +198,7 @@ export const AttendeeDashboard: React.FC = () => {
             <Calendar size={36} className="mx-auto text-stone-300 mb-2" />
             <p className="font-semibold text-stone-700 text-sm">Aucune session enregistrée pour le moment</p>
             <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-              Parcourez le programme IndabaX et cliquez sur le signet pour construire votre agenda personnalisé.
+              Parcourez le {term.schedule} et cliquez sur le signet pour construire votre agenda personnalisé.
             </p>
             <button
               onClick={() => setActiveTab('schedule')}
@@ -253,9 +252,9 @@ export const AttendeeDashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Accréditation Officielle</span>
-            <h3 className="text-lg font-bold">Certificat de Participation IndabaX Bénin 2026</h3>
+            <h3 className="text-lg font-bold">Certificat de participation • {eventLabel}</h3>
             <p className="text-xs text-stone-300 max-w-md mt-0.5">
-              Délivré par le Comité d'Organisation Deep Learning IndabaX Bénin et Sèmè City pour {currentUser.name}.
+              Délivré par l'organisation de {eventConfig.eventName} pour {currentUser.name}.
             </p>
           </div>
         </div>

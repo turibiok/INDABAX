@@ -33,8 +33,14 @@ type Mode = 'signin' | 'register' | 'forgot' | 'reset';
 const MIN_LENGTH = 6;
 
 export const LoginView: React.FC = () => {
-  const { signInWithEmail, registerWithEmail, isAuthenticating, isSheetsLinked, sheetsConfig, eventConfig } =
-    useEvent();
+  const {
+    signInWithEmail,
+    registerWithEmail,
+    isAuthenticating,
+    isSheetsLinked,
+    sheetsConfig,
+    eventConfig,
+    eventHeadline, eventLabel } = useEvent();
 
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
@@ -195,8 +201,7 @@ export const LoginView: React.FC = () => {
         <span className="bg-amber-400 text-stone-950 text-[10px] uppercase font-black px-2 py-0.5 rounded mr-2">
           Événement officiel
         </span>
-        {eventConfig.eventName} {eventConfig.edition} • {eventConfig.startDate} → {eventConfig.endDate} •{' '}
-        {eventConfig.location}
+        {eventHeadline}
       </div>
 
       <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
@@ -205,14 +210,17 @@ export const LoginView: React.FC = () => {
           <div className="hidden md:flex flex-col justify-between bg-gradient-to-br from-emerald-900 via-emerald-800 to-stone-900 text-white rounded-3xl p-8 shadow-2xl">
             <div>
               {/*
-                * Le panneau est vert foncé : c'est la variante claire du logo
-                * qui convient, quel que soit le thème choisi par la personne.
+                * Le panneau est vert foncé : c'est la variante pour fond sombre
+                * qui convient ici, quel que soit le thème choisi par la
+                * personne. Le logo de l'événement passe avant celui livré.
                 */}
               <img
-                src="/indabax-logo-clair.png"
-                alt="Deep Learning IndabaX Benin Republic"
-                width={900}
-                height={253}
+                src={
+                  (eventConfig.branding?.logoDarkUrl || '').trim() ||
+                  (eventConfig.branding?.logoUrl || '').trim() ||
+                  '/indabax-logo-clair.png'
+                }
+                alt={eventLabel}
                 className="w-full max-w-[280px] h-auto mb-6"
               />
 
@@ -250,7 +258,7 @@ export const LoginView: React.FC = () => {
               * ne le montrerait pas du tout sur téléphone.
               */}
             <div className="md:hidden mb-6 flex justify-center">
-              <Logo variant="complet" height={52} alt="Deep Learning IndabaX Benin Republic" />
+              <Logo variant="complet" height={52} />
             </div>
 
             <div className="mb-6">

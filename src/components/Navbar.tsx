@@ -54,8 +54,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
     setPreviewRole,
     refreshMyRole,
     signOut,
-    authSession,
-  } = useEvent();
+    authSession, eventConfig, eventLabel, eventHeadline } = useEvent();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
@@ -107,7 +106,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
       <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-amber-600 dark:from-emerald-950 dark:via-stone-900 dark:to-amber-950 text-white text-xs font-semibold py-1.5 px-4 text-center flex items-center justify-between">
         <div className="hidden sm:flex items-center gap-2">
           <span className="bg-amber-400 text-stone-950 text-[10px] uppercase font-black px-2 py-0.5 rounded shadow-xs">Événement Officiel</span>
-          <span className="text-emerald-50 dark:text-stone-200">IndabaX Bénin 2026 • 18-20 Septembre 2026 • Cotonou, Bénin</span>
+          <span className="text-emerald-50 dark:text-stone-200">{eventHeadline}</span>
         </div>
         <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 text-[11px]">
           <span className="flex items-center gap-1.5 text-emerald-100 dark:text-stone-300 font-medium">
@@ -148,15 +147,22 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
 
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('schedule')}>
-            <Logo variant="ecusson" height={40} alt="IndabaX Bénin 2026" />
+            <Logo variant="ecusson" height={40} alt={eventLabel} />
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-heading font-black text-lg tracking-tight text-stone-900 dark:text-white">
-                  INDABAX <span className="text-amber-600 dark:text-amber-400">BÉNIN</span>
+                {/*
+                  * Le nom vient de la configuration. Le découper en deux
+                  * moitiés colorées n'aurait plus de sens pour un événement
+                  * dont le nom ne tient pas en deux mots.
+                  */}
+                <span className="font-heading font-black text-lg tracking-tight text-stone-900 dark:text-white uppercase">
+                  {eventConfig.eventName}
                 </span>
-                <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                  2026
-                </span>
+                {eventConfig.edition && (
+                  <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                    {eventConfig.edition}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-stone-600 dark:text-stone-400 font-medium">Deep Learning & IA pour l'Afrique</p>
             </div>

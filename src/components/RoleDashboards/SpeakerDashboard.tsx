@@ -22,6 +22,7 @@ import {
 import { useEvent } from '../../context/EventContext';
 import { SpeakerResource } from '../../types';
 import { getGoogleCalendarUrl, syncSessionToGoogle } from '../../services/calendarService';
+import { capitaliser } from '../../permissions';
 
 export const SpeakerDashboard: React.FC = () => {
   const { 
@@ -30,8 +31,7 @@ export const SpeakerDashboard: React.FC = () => {
     feedbacks, 
     speakerResources, 
     addSpeakerResource,
-    addAnnouncement
-  } = useEvent();
+    addAnnouncement, eventConfig, term } = useEvent();
 
   const [resourceTitle, setResourceTitle] = useState('');
   const [resourceUrl, setResourceUrl] = useState('');
@@ -130,7 +130,7 @@ export const SpeakerDashboard: React.FC = () => {
             </div>
           </div>
           <p className="text-2xl font-bold text-stone-900">{displaySessions.length}</p>
-          <span className="text-[11px] text-stone-500 font-medium">Programme IndabaX Bénin</span>
+          <span className="text-[11px] text-stone-500 font-medium">{capitaliser(term.schedule)} • {eventConfig.eventName}</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs">

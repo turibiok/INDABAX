@@ -20,6 +20,7 @@ import {
   PushNotificationAlert,
   EventConfig,
   EventRole,
+  EventTerminology,
 } from '../types';
 import {
   INITIAL_SESSIONS,
@@ -33,9 +34,16 @@ import {
 } from '../data/mockData';
 import { syncSessionToGoogle, downloadIcsFile } from '../services/calendarService';
 import { notificationService } from '../services/notificationService';
+import { ligneEvenement, periodeEvenement, prefixeBillet } from '../eventFormat';
 import { rowsToParticipants, rowsToSessions } from '../services/sheetsDb';
 import * as api from '../services/api';
-import { RoleCapabilities, capabilitiesFor, labelForRole, setActiveRoles } from '../permissions';
+import {
+  DEFAULT_TERMINOLOGY,
+  RoleCapabilities,
+  capabilitiesFor,
+  labelForRole,
+  setActiveRoles,
+} from '../permissions';
 import { normalizeEmail } from '../lib/sheets';
 
 interface EventContextType {
@@ -131,6 +139,22 @@ interface EventContextType {
 
   // Event Configuration & Super Admin
   eventConfig: EventConfig;
+  /**
+   * Nom de l'événement suivi de son édition, tel qu'on l'écrit dans une phrase.
+   *
+   * Dérivé une fois ici plutôt que recomposé dans chaque écran : c'est la
+   * dispersion de « IndabaX Bénin 2026 » dans dix-sept composants qui rendait
+   * l'application inutilisable pour un autre événement.
+   */
+  eventLabel: string;
+  /** Période de l'événement, écrite pour être lue : « 18 – 20 septembre 2026 ». */
+  eventDateRange: string;
+  /** Ligne de présentation : nom, période et lieu, fragments vides omis. */
+  eventHeadline: string;
+  /** Les mots de l'événement, avec les valeurs livrées en repli. */
+  term: EventTerminology;
+  /** Préfixe à donner aux numéros de billet créés par l'application. */
+  ticketPrefix: string;
   /** Vrai tant que la configuration du serveur n'est pas arrivée. */
   eventConfigLoading: boolean;
   /**
@@ -602,6 +626,32 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * n'ont pas accès à ce contexte, et servirait sinon les rôles livrés au lieu
    * de ceux de l'événement.
    */
+  /** « Nom Édition », sans espace superflu si l'édition n'est pas renseignée. */
+  const eventLabel = useMemo(
+    () => [eventConfig.eventName, eventConfig.edition].filter(Boolean).join(' ').trim(),
+    [eventConfig.eventName, eventConfig.edition],
+  );
+
+  const eventDateRange = useMemo(
+    () => periodeEvenement(eventConfig.startDate, eventConfig.endDate),
+    [eventConfig.startDate, eventConfig.endDate],
+  );
+
+  const eventHeadline = useMemo(
+    () => ligneEvenement(eventLabel, eventDateRange, eventConfig.location),
+    [eventLabel, eventDateRange, eventConfig.location],
+  );
+
+  const ticketPrefix = useMemo(
+    () => prefixeBillet(eventConfig.eventName, eventConfig.edition, eventConfig.ticketPrefix),
+    [eventConfig.eventName, eventConfig.edition, eventConfig.ticketPrefix],
+  );
+
+  const term = useMemo(
+    () => ({ ...DEFAULT_TERMINOLOGY, ...(eventConfig.terminology || {}) }),
+    [eventConfig.terminology],
+  );
+
   const appliquerConfigDistante = React.useCallback((distante: api.RemoteEventConfig) => {
     setActiveRoles(distante.roles);
 
@@ -615,6 +665,12 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       branding: distante.branding,
     }));
   }, []);
+
+  // Le titre de l'onglet suit l'événement : index.html ne porte qu'un titre de
+  // secours, puisqu'il est servi identique à tous les événements.
+  useEffect(() => {
+    if (eventLabel) document.title = eventLabel;
+  }, [eventLabel]);
 
   // Chargée une fois au démarrage, sans attendre de session : l'écran de
   // connexion affiche déjà le nom de l'événement et son logo.
@@ -2128,6 +2184,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       isImportModalOpen,
       setIsImportModalOpen,
       eventConfig,
+      eventLabel,
+      eventDateRange,
+      eventHeadline,
+      term,
+      ticketPrefix,
       eventConfigLoading,
       updateEventConfig,
       updateEventRoles,

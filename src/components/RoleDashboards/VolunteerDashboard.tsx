@@ -257,7 +257,7 @@ export const VolunteerDashboard: React.FC = () => {
             <div className="space-y-2.5 mb-4">
               <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-bold text-stone-900">Coordinateur Général IndabaX</p>
+                  <p className="font-bold text-stone-900">Coordination générale</p>
                   <p className="text-stone-500">Mahuvi Vituribio K.</p>
                 </div>
                 <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md">

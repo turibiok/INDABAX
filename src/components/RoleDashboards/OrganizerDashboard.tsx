@@ -62,8 +62,7 @@ export const OrganizerDashboard: React.FC = () => {
     setIsImportModalOpen,
     setIsSheetsSetupOpen,
     openScanner,
-    theme
-  } = useEvent();
+    theme, eventLabel, eventConfig, ticketPrefix } = useEvent();
 
   const [sheetsMessage, setSheetsMessage] = useState<string | null>(null);
 
@@ -180,14 +179,14 @@ export const OrganizerDashboard: React.FC = () => {
     e.preventDefault();
     if (!newAttendeeName.trim() || !newAttendeeEmail.trim()) return;
 
-    const ticketNumber = `INDABAX-BJ-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const ticketNumber = `${ticketPrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newP: Participant = {
       id: `usr-${Date.now()}`,
       ticketNumber,
       name: newAttendeeName.trim(),
       email: newAttendeeEmail.trim().toLowerCase(),
       role: newAttendeeRole,
-      institution: newAttendeeOrg.trim() || 'IndabaX Bénin',
+      institution: newAttendeeOrg.trim() || eventConfig.eventName,
       position: 'Participant sur place',
       country: 'Bénin',
       city: 'Cotonou',
@@ -221,7 +220,7 @@ export const OrganizerDashboard: React.FC = () => {
               <ShieldCheck size={20} className="text-white" />
             </span>
             <span className="text-xs font-bold tracking-wider uppercase text-amber-200">
-              Direction & Pilotage IndabaX Bénin 2026
+              Direction & Pilotage • {eventLabel}
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Supervision & Analyses en Temps Réel</h1>

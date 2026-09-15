@@ -26,8 +26,7 @@ export const NetworkingView: React.FC<{ onOpenQRScanner: () => void }> = ({ onOp
     participants, 
     currentUser, 
     connections, 
-    addConnection 
-  } = useEvent();
+    addConnection, eventLabel } = useEvent();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilterRole, setSelectedFilterRole] = useState('all');
@@ -97,7 +96,7 @@ export const NetworkingView: React.FC<{ onOpenQRScanner: () => void }> = ({ onOp
       vcfString += `EMAIL:${c.partnerEmail}\r\n`;
       vcfString += `ORG:${c.partnerInstitution}\r\n`;
       vcfString += `TITLE:${c.partnerRole}\r\n`;
-      if (c.notes) vcfString += `NOTE:Rencontré à IndabaX Bénin 2026. Note: ${c.notes}\r\n`;
+      if (c.notes) vcfString += `NOTE:Rencontré à ${eventLabel}. Note: ${c.notes}\r\n`;
       vcfString += "END:VCARD\r\n\r\n";
     });
 
@@ -321,7 +320,7 @@ export const NetworkingView: React.FC<{ onOpenQRScanner: () => void }> = ({ onOp
         <div className="space-y-4">
           <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
             <div>
-              <h3 className="font-heading font-black text-sm text-stone-900">Mon Carnet de Contacts IndabaX</h3>
+              <h3 className="font-heading font-black text-sm text-stone-900">Mon carnet de contacts</h3>
               <p className="text-xs text-stone-500">{connections.length} contacts sauvegardés durant l'événement.</p>
             </div>
 

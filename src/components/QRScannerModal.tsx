@@ -27,8 +27,7 @@ export const QRScannerModal: React.FC<{
     participants,
     checkInParticipant,
     isSheetsLinked,
-    canWriteToSheets,
-  } = useEvent();
+    canWriteToSheets, term, eventConfig, ticketPrefix } = useEvent();
 
   const [selectedSessionId, setSelectedSessionId] = useState<string>(
     targetSession?.id || (sessions[0]?.id ?? '')
@@ -130,7 +129,7 @@ export const QRScannerModal: React.FC<{
       return;
     }
 
-    const res = await checkInParticipant(data, selectedSessionId, "Scanner IndabaX");
+    const res = await checkInParticipant(data, selectedSessionId, `Scanner ${eventConfig.eventName}`);
     setScanResult(res);
 
     if (res.participant) {
@@ -188,7 +187,7 @@ export const QRScannerModal: React.FC<{
                 Scanner & Émargement Express
               </h2>
               <p className="text-xs text-stone-500">
-                Validation instantanée des présences aux sessions IndabaX
+                Validation instantanée des présences aux {term.sessions}
               </p>
             </div>
           </div>
@@ -312,7 +311,7 @@ export const QRScannerModal: React.FC<{
           <form onSubmit={handleManualSubmit} className="flex-1 flex gap-2">
             <input
               type="text"
-              placeholder="Ex: INDABAX-BJ-2026-001 ou email"
+              placeholder={`Ex : ${ticketPrefix}-001 ou email`}
               value={manualTicketInput}
               onChange={(e) => setManualTicketInput(e.target.value)}
               className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-emerald-600"

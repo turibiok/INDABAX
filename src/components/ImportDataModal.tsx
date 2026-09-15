@@ -29,8 +29,7 @@ export const ImportDataModal: React.FC<ImportDataModalProps> = ({ isOpen, onClos
     announcements,
     importParticipants,
     importSessions,
-    importAnnouncements
-  } = useEvent();
+    importAnnouncements, eventConfig, ticketPrefix } = useEvent();
 
   const [activeImportType, setActiveImportType] = useState<'participants' | 'sessions' | 'announcements'>('participants');
   const [inputText, setInputText] = useState('');
@@ -179,11 +178,11 @@ Mireille Dossou,mireille.d@sèmècity.bj,volunteer,Sèmè City Open Lab,Chef de 
     if (activeImportType === 'participants') {
       const formatted: Participant[] = parsedData.map((row, idx) => ({
         id: row.id || `usr-imp-${Date.now()}-${idx}`,
-        ticketNumber: row.ticketnumber || row.ticket || `INDABAX-BJ-2026-${Math.floor(2000 + Math.random() * 7000)}`,
+        ticketNumber: row.ticketnumber || row.ticket || `${ticketPrefix}-${Math.floor(2000 + Math.random() * 7000)}`,
         name: row.nom || row.name || 'Participant Anonyme',
         email: row.email || `participant${idx}@indabax.bj`,
         role: (row.role?.toLowerCase() as ParticipantRole) || 'attendee',
-        institution: row.institution || row.organisation || 'IndabaX Bénin',
+        institution: row.institution || row.organisation || eventConfig.eventName,
         position: row.poste || row.position || 'Auditeur',
         city: row.ville || row.city || 'Cotonou',
         country: row.pays || row.country || 'Bénin',
@@ -201,9 +200,9 @@ Mireille Dossou,mireille.d@sèmècity.bj,volunteer,Sèmè City Open Lab,Chef de 
       const formatted: Session[] = parsedData.map((row, idx) => ({
         id: row.id || `ses-imp-${Date.now()}-${idx}`,
         title: row.titre || row.title || 'Session Sans Titre',
-        speaker: row.speaker || row.conferencier || 'Intervenant IndabaX',
+        speaker: row.speaker || row.conferencier || 'Intervenant',
         speakerTitle: row.speakertitle || 'Expert IA',
-        speakerInstitution: row.speakerinstitution || 'IndabaX Team',
+        speakerInstitution: row.speakerinstitution || eventConfig.eventName,
         speakerPhoto: row.speakerphoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
         day: Number(row.day || row.jour) || 1,
         date: row.date || '2026-09-18',
@@ -227,7 +226,7 @@ Mireille Dossou,mireille.d@sèmècity.bj,volunteer,Sèmè City Open Lab,Chef de 
         content: row.contenu || row.content || '',
         category: (row.categorie?.toUpperCase() as any) || 'PROGRAMME',
         priority: (row.priorite?.toLowerCase() as any) || 'normal',
-        authorName: row.auteur || row.author || 'Organisation IndabaX',
+        authorName: row.auteur || row.author || eventConfig.eventName,
         authorRole: 'organizer',
         authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
         timestamp: new Date().toISOString(),

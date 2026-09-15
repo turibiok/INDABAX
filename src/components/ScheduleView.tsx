@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Session, SessionTrack } from '../types';
 import { useEvent } from '../context/EventContext';
+import { capitaliser } from '../permissions';
 
 export const ScheduleView: React.FC<{
   onOpenScannerForSession: (session: Session) => void;
@@ -39,8 +40,7 @@ export const ScheduleView: React.FC<{
     toggleSaveSession,
     checkIns,
     feedbacks,
-    addSessionToCalendar
-  } = useEvent();
+    addSessionToCalendar, eventLabel, term } = useEvent();
 
   const [filterMode, setFilterMode] = useState<'all' | 'saved'>('all');
   const [selectedSessionForModal, setSelectedSessionForModal] = useState<Session | null>(null);
@@ -126,7 +126,7 @@ export const ScheduleView: React.FC<{
         <div className="relative z-10 max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300 text-amber-300 text-xs font-bold mb-3">
             <Sparkles className="w-3.5 h-3.5" />
-            Programme Officiel IndabaX Bénin 2026
+            {capitaliser(term.schedule)} officiel • {eventLabel}
           </div>
           <h1 className="text-2xl sm:text-4xl font-heading font-black text-white tracking-tight leading-tight mb-2">
             Renforcer la Recherche en IA & Deep Learning au <span className="bg-gradient-to-r from-amber-400 via-orange-300 to-emerald-300 bg-clip-text text-transparent">Bénin</span>

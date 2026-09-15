@@ -29,7 +29,7 @@ import { ParticipantRole } from '../types';
 import { downloadBadgePdf } from '../services/badgePdfService';
 
 export const MyBadgeView: React.FC = () => {
-  const { currentUser, updateUserProfile, sessions, checkIns } = useEvent();
+  const { currentUser, updateUserProfile, sessions, checkIns, eventConfig, eventLabel, term } = useEvent();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -73,7 +73,7 @@ export const MyBadgeView: React.FC = () => {
       twitter: formData.twitter,
     });
     setIsEditing(false);
-    setSaveToast('Profil et Badge IndabaX mis à jour !');
+    setSaveToast(`Profil et ${term.badge} mis à jour !`);
     setTimeout(() => setSaveToast(null), 3000);
   };
 
@@ -96,7 +96,7 @@ export const MyBadgeView: React.FC = () => {
     id: currentUser.id,
     role: currentUser.role,
     institution: currentUser.institution,
-    event: "IndabaX Benin 2026"
+    event: eventLabel
   });
 
   // Calculate my checked-in sessions
@@ -145,7 +145,7 @@ export const MyBadgeView: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-300 text-xs font-bold mb-2">
             <Award className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
-            Pass Officiel d'Accès IndabaX Bénin
+            Pass officiel d'accès • {eventConfig.eventName}
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-black text-stone-900 dark:text-white">
             Mon Badge Digital & Profil
@@ -220,7 +220,7 @@ export const MyBadgeView: React.FC = () => {
                   IX
                 </div>
                 <div className="text-left">
-                  <p className="text-xs font-heading font-black tracking-tight text-white">INDABAX BÉNIN</p>
+                  <p className="text-xs font-heading font-black tracking-tight text-white uppercase">{eventConfig.eventName}</p>
                   <p className="text-[9px] text-amber-300 font-mono font-bold">EDITION 2026</p>
                 </div>
               </div>
@@ -535,7 +535,7 @@ export const MyBadgeView: React.FC = () => {
       {isFullscreenQR && (
         <div className="fixed inset-0 z-50 bg-stone-900/80 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setIsFullscreenQR(false)}>
           <div className="bg-white dark:bg-stone-900 p-8 rounded-3xl text-center max-w-sm w-full shadow-2xl text-stone-900 dark:text-white border border-stone-200 dark:border-stone-800" onClick={e => e.stopPropagation()}>
-            <p className="text-xs font-bold uppercase text-emerald-800 dark:text-emerald-400 mb-1">IndabaX Bénin 2026 - Pass</p>
+            <p className="text-xs font-bold uppercase text-emerald-800 dark:text-emerald-400 mb-1">{eventLabel} — Pass</p>
             <h3 className="text-lg font-black text-stone-900 dark:text-white mb-3">{currentUser.name}</h3>
             
             <div className="inline-block p-3 border-2 border-stone-900 dark:border-amber-400 rounded-2xl mb-3 bg-white">

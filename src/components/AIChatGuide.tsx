@@ -17,7 +17,7 @@ import {
 import { useEvent } from '../context/EventContext';
 
 export const AIChatGuide: React.FC = () => {
-  const { sessions, participants, currentUser } = useEvent();
+  const { sessions, participants, currentUser, eventConfig, eventLabel, term } = useEvent();
 
   const [messages, setMessages] = useState<Array<{
     role: 'user' | 'assistant';
@@ -26,7 +26,9 @@ export const AIChatGuide: React.FC = () => {
   }>>([
     {
       role: 'assistant',
-      content: `Kouabô ! Bienvenue sur le Guide IA d'IndabaX Bénin 2026. 🌴✨\n\nJe suis là pour vous orienter sur le programme, vous renseigner sur les conférenciers, les ateliers pratiques (NLP Fongbe, Vision, RAG, Éthique) et analyser des photos de posters de recherche.`
+      content: `Bienvenue sur le Guide IA de ${eventLabel}. ✨
+
+Je suis là pour vous orienter sur le ${term.schedule}, vous renseigner sur les intervenants et les ${term.sessions}, et analyser vos photos de documents.`
     }
   ]);
 
@@ -66,7 +68,7 @@ export const AIChatGuide: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageBase64: imageToSend,
-            prompt: textToSend || "Analyse ce poster de recherche ou cette photo de la conférence IndabaX Bénin et résume les points essentiels."
+            prompt: textToSend || `Analyse cette photo prise à ${eventLabel} et résume les points essentiels.`
           })
         });
         const data = await res.json();
@@ -141,7 +143,7 @@ export const AIChatGuide: React.FC = () => {
             </div>
           </div>
           <div>
-            <h2 className="font-heading font-black text-xl text-white">Guide IA • IndabaX Bénin</h2>
+            <h2 className="font-heading font-black text-xl text-white">Guide IA • {eventConfig.eventName}</h2>
             <p className="text-xs text-stone-300">Assistant intelligent propulsé par Gemini 2.5</p>
           </div>
         </div>
@@ -186,7 +188,7 @@ export const AIChatGuide: React.FC = () => {
             </div>
             <div className="bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3 text-xs text-stone-600 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-500 animate-spin" />
-              <span>Recherche dans le programme IndabaX et formulation de la réponse...</span>
+              <span>Recherche dans le {term.schedule} et formulation de la réponse…</span>
             </div>
           </div>
         )}

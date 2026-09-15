@@ -44,6 +44,15 @@ export interface EventIdentity {
   websiteUrl: string;
   twitterHandle: string;
   linkedinUrl: string;
+  /**
+   * Prefixe des numeros de billet, par exemple « INDABAX-BJ-2026 ».
+   *
+   * Configurable et non deduit du nom : les billets deja distribues portent un
+   * prefixe qu'il faut pouvoir conserver a l'identique, faute de quoi deux
+   * personnes du meme evenement auraient des billets de formes differentes.
+   * Laisse vide, il est fabrique a partir du nom de l'evenement.
+   */
+  ticketPrefix: string;
 }
 
 /**
@@ -102,6 +111,7 @@ const IDENTITE_PAR_DEFAUT: EventIdentity = {
   websiteUrl: '',
   twitterHandle: '',
   linkedinUrl: '',
+  ticketPrefix: '',
 };
 
 const REGLAGES_PAR_DEFAUT: EventSettings = {
@@ -337,6 +347,9 @@ const CLES_IDENTITE: (keyof EventIdentity)[] = [
   'themeDescription',
   'contactEmail',
   'websiteUrl',
+  'twitterHandle',
+  'linkedinUrl',
+  'ticketPrefix',
 ];
 
 const CLES_APPARENCE: (keyof EventBranding)[] = [

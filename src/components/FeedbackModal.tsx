@@ -17,7 +17,7 @@ export const FeedbackModal: React.FC<{
   onClose: () => void;
   session: Session | null;
 }> = ({ isOpen, onClose, session }) => {
-  const { currentUser, submitFeedback, feedbacks, isSheetsLinked, canWriteToSheets } = useEvent();
+  const { currentUser, submitFeedback, feedbacks, isSheetsLinked, canWriteToSheets, eventConfig, term } = useEvent();
 
   const [overallRating, setOverallRating] = useState(5);
   const [contentQuality, setContentQuality] = useState(5);
@@ -123,7 +123,7 @@ export const FeedbackModal: React.FC<{
             </div>
             <h4 className="font-heading font-black text-lg text-stone-900">Merci pour votre retour !</h4>
             <p className="text-xs text-stone-600 max-w-xs mx-auto">
-              Votre avis a été enregistré et synchronisé avec les organisateurs IndabaX Bénin.
+              Votre {term.feedback} a été enregistré et synchronisé avec les organisateurs de {eventConfig.eventName}.
             </p>
             {isSheetsLinked && canWriteToSheets && (
               <p className="text-[11px] text-emerald-800 font-bold flex items-center justify-center gap-1">

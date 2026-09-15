@@ -87,8 +87,7 @@ export const SuperAdminSettings: React.FC = () => {
     downloadTemplateCsv,
     setIsImportModalOpen,
     setIsSheetsSetupOpen,
-    currentUser
-  } = useEvent();
+    currentUser, term } = useEvent();
 
   // Retour des actions liees au classeur (liaison, import, envoi)
   const [sheetsMessage, setSheetsMessage] = useState<string | null>(null);
@@ -1429,7 +1428,7 @@ export const SuperAdminSettings: React.FC = () => {
                   Zone de Danger : Réinitialisation Usine
                 </h3>
                 <p className="text-xs text-red-700/80 dark:text-red-400/80">
-                  Remet à zéro l'ensemble des données locales (sessions, participants, feedbacks, émargements) et réinitialise avec le jeu de données officiel initial IndabaX Bénin 2026.
+                  Remet à zéro l'ensemble des données locales ({term.sessions}, participants, {term.feedbacks}, {term.checkIns}) et réinitialise avec le jeu de données livré.
                 </p>
               </div>
             </div>

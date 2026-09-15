@@ -38,8 +38,7 @@ export const DiscussionsView: React.FC = () => {
     setActiveDirectPartnerId,
     sendChannelMessage,
     sendDirectMessage,
-    reactToMessage
-  } = useEvent();
+    reactToMessage, eventConfig, term } = useEvent();
 
   const [messageText, setMessageText] = useState('');
   const [attachmentUrl, setAttachmentUrl] = useState('');
@@ -100,7 +99,7 @@ export const DiscussionsView: React.FC = () => {
     if (!activePartner) return;
     const sharedInterests = (currentUser.interests || []).filter(i => (activePartner.interests || []).includes(i));
     if (sharedInterests.length > 0) {
-      setMessageText(`Bonjour ${activePartner.name}, ravi(e) de te rencontrer à IndabaX Bénin ! J'ai vu que nous nous intéressons tous les deux à ${sharedInterests.join(' et ')}. Tu participes à quel workshop aujourd'hui ?`);
+      setMessageText(`Bonjour ${activePartner.name}, ravi(e) de te rencontrer à ${eventConfig.eventName} ! J'ai vu que nous nous intéressons tous les deux à ${sharedInterests.join(' et ')}. Tu suis quelle ${term.session} aujourd'hui ?`);
     } else {
       setMessageText(`Bonjour ${activePartner.name} ! Je suis ${currentUser.name} (${currentUser.institution}). Au plaisir d'échanger sur vos projets en IA et d'assister aux sessions ensemble !`);
     }
@@ -136,7 +135,7 @@ export const DiscussionsView: React.FC = () => {
           </div>
           <div>
             <h1 className="text-base font-bold text-stone-900 leading-tight">Discussions & Salons Thématiques</h1>
-            <p className="text-xs text-stone-500">Échangez en direct avec conférenciers, volontaires, organisateurs et participants de l'IndabaX.</p>
+            <p className="text-xs text-stone-500">Échangez en direct avec toutes les personnes présentes à {eventConfig.eventName}.</p>
           </div>
         </div>
 

@@ -33,8 +33,7 @@ export const AnnouncementsView: React.FC = () => {
     addAnnouncementComment,
     addAnnouncement,
     deleteAnnouncement,
-    togglePinAnnouncement
-  } = useEvent();
+    togglePinAnnouncement, eventConfig, term } = useEvent();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
@@ -201,7 +200,7 @@ export const AnnouncementsView: React.FC = () => {
           <div className="text-center py-16 bg-white rounded-2xl border border-stone-200/80 p-8 shadow-xs">
             <Bell size={40} className="mx-auto text-stone-300 mb-3" />
             <h3 className="text-base font-semibold text-stone-800">Aucune annonce dans cette catégorie</h3>
-            <p className="text-sm text-stone-500 mt-1">Sélectionnez une autre thématique pour voir les communications de l'IndabaX.</p>
+            <p className="text-sm text-stone-500 mt-1">Sélectionnez une autre {term.track} pour voir les communications de {eventConfig.eventName}.</p>
           </div>
         ) : (
           filteredAnnouncements.map((ann) => {
