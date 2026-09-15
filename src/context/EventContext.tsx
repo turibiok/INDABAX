@@ -166,8 +166,18 @@ interface EventContextType {
   updateEventConfig: (updated: Partial<EventConfig>) => Promise<{ success: boolean; message: string }>;
   /** Remplace la table des rôles. Réservé à qui peut gérer les rôles. */
   updateEventRoles: (roles: EventRole[]) => Promise<{ success: boolean; message: string }>;
-  /** Relit la configuration du classeur, après une modification faite à la main. */
-  reloadEventConfigFromSheet: () => Promise<{ success: boolean; message: string }>;
+  /**
+   * Relit la configuration du classeur, après une modification faite à la main.
+   *
+   * Rend les rôles relus : l'appelant ne peut pas les prendre dans `eventConfig`
+   * juste après, cette valeur étant celle de son rendu et non celle qui vient
+   * d'arriver.
+   */
+  reloadEventConfigFromSheet: () => Promise<{
+    success: boolean;
+    message: string;
+    roles?: EventRole[];
+  }>;
 
   // Announcements & Discussions
   announcements: Announcement[];
@@ -1871,7 +1881,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const { config, warnings, message } = await api.reloadEventConfig();
       appliquerConfigDistante(config);
-      return { success: warnings.length === 0, message: warnings.length > 0 ? warnings.join(' ') : message };
+      return {
+        success: warnings.length === 0,
+        message: warnings.length > 0 ? warnings.join(' ') : message,
+        roles: config.roles,
+      };
     } catch (error) {
       return {
         success: false,

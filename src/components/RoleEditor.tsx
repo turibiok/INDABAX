@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Loader2,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   ShieldCheck,
@@ -70,7 +71,7 @@ function versIdentifiant(libelle: string): string {
 }
 
 export const RoleEditor: React.FC = () => {
-  const { eventConfig, updateEventRoles, capabilities } = useEvent();
+  const { eventConfig, updateEventRoles, reloadEventConfigFromSheet, capabilities } = useEvent();
 
   const rolesEnVigueur = useMemo(
     () => (eventConfig.roles?.length ? eventConfig.roles : DEFAULT_ROLES),
@@ -81,6 +82,7 @@ export const RoleEditor: React.FC = () => {
   const [enregistrement, setEnregistrement] = useState(false);
   const [message, setMessage] = useState<{ texte: string; ok: boolean } | null>(null);
   const [nouveauLibelle, setNouveauLibelle] = useState('');
+  const [relecture, setRelecture] = useState(false);
 
   const modifie = JSON.stringify(brouillon) !== JSON.stringify(rolesEnVigueur);
 
@@ -150,6 +152,26 @@ export const RoleEditor: React.FC = () => {
 
   const supprimer = (id: string) => {
     setBrouillon(prev => prev.filter(role => role.id !== id));
+  };
+
+  /**
+   * Reprend ce que le classeur contient.
+   *
+   * Le serveur garde la configuration en memoire : une correction faite a la
+   * main dans la feuille ne serait vue qu'au prochain demarrage. Ce bouton
+   * evite d'avoir a redemarrer le service pour cela.
+   */
+  const relire = async () => {
+    setRelecture(true);
+    const resultat = await reloadEventConfigFromSheet();
+    setRelecture(false);
+    setMessage({ texte: resultat.message, ok: resultat.success });
+
+    // Le brouillon repart de ce qui vient d'etre lu : le garder reviendrait a
+    // proposer d'ecraser la correction qu'on vient justement de reprendre. Les
+    // roles viennent du resultat, et non de `eventConfig` : cette derniere
+    // valeur est celle du rendu courant, pas celle qui vient d'arriver.
+    if (resultat.roles?.length) setBrouillon(resultat.roles);
   };
 
   const enregistrer = async () => {
@@ -381,6 +403,17 @@ export const RoleEditor: React.FC = () => {
           className="px-4 py-2.5 rounded-xl border border-stone-300 dark:border-stone-700 text-sm font-bold flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
         >
           <RotateCcw size={16} /> Annuler les modifications
+        </button>
+
+        <button
+          type="button"
+          onClick={relire}
+          disabled={relecture || enregistrement}
+          title="Reprend l'identité, le vocabulaire et les rôles tels qu'ils sont écrits dans le classeur"
+          className="px-4 py-2.5 rounded-xl border border-stone-300 dark:border-stone-700 text-sm font-bold flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+        >
+          {relecture ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+          {relecture ? 'Relecture…' : 'Relire le classeur'}
         </button>
       </div>
     </div>
