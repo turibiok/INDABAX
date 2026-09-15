@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useEvent } from '../context/EventContext';
+import { DEFAULT_ROLES, FALLBACK_ROLE_ID } from '../permissions';
+import { classesDiscretes } from '../roleAccents';
 import {
   Settings,
   Calendar,
@@ -108,6 +110,9 @@ export const SuperAdminSettings: React.FC = () => {
   const [generalForm, setGeneralForm] = useState(eventConfig);
   const [hasUnsavedGeneral, setHasUnsavedGeneral] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  /** Message d'échec : l'enregistrement va jusqu'au classeur et peut manquer. */
+  const [saveErrorMsg, setSaveErrorMsg] = useState('');
+  const [savingGeneral, setSavingGeneral] = useState(false);
 
   // Modal / Editor States for Sessions
   const [editingSession, setEditingSession] = useState<Session | null>(null);
@@ -158,22 +163,41 @@ export const SuperAdminSettings: React.FC = () => {
     'Networking'
   ];
 
-  const ALL_ROLES: { value: ParticipantRole; label: string; color: string }[] = [
-    { value: 'super-admin', label: 'Super-Admin', color: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900' },
-    { value: 'organizer', label: 'Organisateur', color: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900' },
-    { value: 'speaker', label: 'Conférencier', color: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900' },
-    { value: 'volunteer', label: 'Volontaire', color: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900' },
-    { value: 'attendee', label: 'Participant', color: 'bg-stone-500/10 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800' },
-    { value: 'sponsor', label: 'Sponsor', color: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-900' }
-  ];
+  /*
+   * Les rôles de l'événement, et non plus une liste figée : un rôle créé pour
+   * l'occasion doit apparaître dans les filtres et les listes déroulantes de
+   * cet écran, faute de quoi il serait invisible là même où on l'administre.
+   */
+  const ALL_ROLES = useMemo(
+    () =>
+      (eventConfig.roles?.length ? eventConfig.roles : DEFAULT_ROLES).map(role => ({
+        value: role.id,
+        label: role.label,
+        color: classesDiscretes(role.id),
+      })),
+    [eventConfig.roles],
+  );
 
   // Save General Configuration
-  const handleSaveGeneralConfig = (e: React.FormEvent) => {
+  const handleSaveGeneralConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateEventConfig(generalForm);
-    setHasUnsavedGeneral(false);
-    setSaveSuccessMsg('Configuration de l\'événement enregistrée avec succès !');
-    setTimeout(() => setSaveSuccessMsg(''), 3500);
+
+    // L'enregistrement va jusqu'au classeur : on attend son verdict avant
+    // d'annoncer quoi que ce soit. Annoncer « enregistré » sans attendre
+    // ferait croire à l'organisateur que sa saisie est partie alors qu'elle
+    // n'aurait pas quitté l'écran.
+    setSavingGeneral(true);
+    const resultat = await updateEventConfig(generalForm);
+    setSavingGeneral(false);
+
+    if (resultat.success) {
+      setHasUnsavedGeneral(false);
+      setSaveSuccessMsg(resultat.message);
+      setTimeout(() => setSaveSuccessMsg(''), 3500);
+    } else {
+      setSaveErrorMsg(resultat.message);
+      setTimeout(() => setSaveErrorMsg(''), 8000);
+    }
   };
 
   // Add Room to Event Config
@@ -425,6 +449,13 @@ export const SuperAdminSettings: React.FC = () => {
       {/* TAB 1: GENERAL EVENT CONFIGURATION */}
       {activeAdminTab === 'general' && (
         <div className="space-y-6">
+          {saveErrorMsg && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-800 dark:text-red-300 rounded-2xl flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+              <span className="text-sm font-semibold">{saveErrorMsg}</span>
+            </div>
+          )}
+
           {saveSuccessMsg && (
             <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 rounded-2xl flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -987,7 +1018,10 @@ export const SuperAdminSettings: React.FC = () => {
                     </tr>
                   ) : (
                     filteredParticipants.map((part) => {
-                      const roleConfig = ALL_ROLES.find(r => r.value === part.role) || ALL_ROLES[4];
+                      const roleConfig =
+                      ALL_ROLES.find(r => r.value === part.role) ||
+                      ALL_ROLES.find(r => r.value === FALLBACK_ROLE_ID) ||
+                      ALL_ROLES[0];
                       return (
                         <tr key={part.id} className="hover:bg-stone-50 dark:hover:bg-stone-800/40 transition">
                           <td className="py-3.5 px-4">

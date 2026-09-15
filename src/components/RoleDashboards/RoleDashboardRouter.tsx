@@ -6,6 +6,7 @@ import { VolunteerDashboard } from './VolunteerDashboard';
 import { AttendeeDashboard } from './AttendeeDashboard';
 import { SuperAdminSettings } from '../SuperAdminSettings';
 import { RoleAccessPanel } from '../RoleAccessPanel';
+import { RoleEditor } from '../RoleEditor';
 import { Eye, ShieldCheck, Sparkles, LifeBuoy, User, Settings, Handshake } from 'lucide-react';
 import { DashboardKind } from '../../types';
 import { labelForRole, roleFor, getActiveRoles } from '../../permissions';
@@ -110,6 +111,18 @@ export const RoleDashboardRouter: React.FC = () => {
       {espace === 'admin' && (
         <>
           <RoleAccessPanel />
+
+          {/*
+            * Définir les rôles vient avant de les attribuer, mais le panneau
+            * d'attribution est celui qu'on ouvre tous les jours : il reste en
+            * tête, et la définition juste après.
+            */}
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-5 shadow-xs">
+              <RoleEditor />
+            </div>
+          </div>
+
           <SuperAdminSettings />
         </>
       )}
