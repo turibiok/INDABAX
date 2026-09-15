@@ -606,6 +606,109 @@ const MESSAGES_TEMPLATE: SheetTemplate = {
   ],
 };
 
+/* ------------------------------------------------------------------ *
+ * 7. Configuration — identité de l'événement
+ * ------------------------------------------------------------------ */
+
+const CONFIG_TEMPLATE: SheetTemplate = {
+  tab: 'Configuration',
+  purpose:
+    "Identité de l'événement : nom, dates, lieu, contacts, logo, couleurs et vocabulaire. Une ligne par réglage, ce qui permet d'en ajouter sans refaire la feuille et de laisser un organisateur corriger le nom de l'événement sans passer par l'application.",
+  direction: 'lecture-écriture',
+  headers: ['Clé', 'Valeur'],
+  rows: [
+    ['eventName', 'IndabaX Bénin'],
+    ['edition', '2026'],
+    ['startDate', '2026-09-18'],
+    ['endDate', '2026-09-20'],
+    ['location', 'Cotonou & Abomey-Calavi, Bénin'],
+    ['venueAddress', "Palais des Congrès de Cotonou & Université d'Abomey-Calavi (UAC)"],
+    ['themeDescription', "L'Essor de l'IA & du Deep Learning pour l'Afrique de l'Ouest."],
+    ['contactEmail', 'contact@indabax.bj'],
+    ['websiteUrl', 'https://indabax.bj'],
+    ['logoUrl', ''],
+    ['logoDarkUrl', ''],
+    ['primaryColor', '#047857'],
+    ['accentColor', '#d97706'],
+    ['term.session', 'session'],
+    ['term.sessions', 'sessions'],
+    ['term.checkIn', 'émargement'],
+    ['term.schedule', 'programme'],
+  ],
+  // « Valeur » n'est pas obligatoire : une cellule vide y signifie « garde ce
+  // qui est livré », ce dont « logoUrl » se sert pour conserver le logo par
+  // défaut. L'exiger reviendrait à interdire cette consigne.
+  requiredColumns: ['Clé'],
+  aliases: {
+    'Clé': ['cle', 'key', 'parametre', 'paramètre', 'reglage', 'réglage'],
+    Valeur: ['value', 'contenu'],
+  },
+  notes: [
+    "Une clé inconnue est ignorée sans bruit : la feuille peut donc servir de pense-bête sans gêner l'application.",
+    "Les clés « term.* » remplacent un mot de l'interface. « term.session » mis à « atelier » fait écrire « atelier » partout où l'application disait « session ».",
+    "Laisser « logoUrl » vide garde le logo livré avec l'application.",
+    "Les couleurs s'écrivent en hexadécimal, par exemple #047857.",
+  ],
+};
+
+/* ------------------------------------------------------------------ *
+ * 8. Rôles — qui a le droit de quoi
+ * ------------------------------------------------------------------ */
+
+const ROLES_TEMPLATE: SheetTemplate = {
+  tab: 'Rôles',
+  purpose:
+    "Les rôles de cet événement et les droits de chacun. Un stage n'a pas de conférenciers et un tournoi n'a pas de sponsors : cette feuille permet de définir les siens sans toucher au code.",
+  direction: 'lecture-écriture',
+  headers: [
+    'ID',
+    'Libellé',
+    'Espace',
+    'Teinte',
+    'Onglets',
+    'Scanner',
+    'Diffuser',
+    'Gérer contenu',
+    'Gérer rôles',
+    'Gérer intégrations',
+    'Exporter',
+    'Voir tous les avis',
+    'Importer',
+  ],
+  rows: [
+    ['super-admin', 'Super-Admin', 'admin', 'rouge', 'tous', 'oui', 'oui', 'oui', 'oui', 'oui', 'oui', 'oui', 'oui'],
+    ['organizer', 'Organisateur', 'organizer', 'ambre', 'tous', 'oui', 'oui', 'oui', 'non', 'oui', 'oui', 'oui', 'oui'],
+    ['speaker', 'Conférencier', 'speaker', 'indigo', 'tous', 'non', 'non', 'non', 'non', 'non', 'non', 'non', 'non'],
+    ['volunteer', 'Volontaire', 'volunteer', 'emeraude', 'schedule, announcements, discussions, dashboard, profile, badge, ai-guide', 'oui', 'non', 'non', 'non', 'non', 'non', 'non', 'non'],
+    ['attendee', 'Participant', 'attendee', 'ardoise', 'tous', 'non', 'non', 'non', 'non', 'non', 'non', 'non', 'non'],
+    ['sponsor', 'Sponsor / Partenaire', 'attendee', 'violet', 'schedule, announcements, discussions, dashboard, networking, profile, badge', 'non', 'non', 'non', 'non', 'non', 'non', 'non', 'non'],
+  ],
+  requiredColumns: ['ID', 'Libellé'],
+  aliases: {
+    ID: ['identifiant', 'role', 'rôle', 'code'],
+    'Libellé': ['libelle', 'nom', 'label', 'intitule', 'intitulé'],
+    Espace: ['dashboard', 'tableau de bord', 'espace personnel'],
+    Teinte: ['couleur', 'accent', 'color'],
+    Onglets: ['tabs', 'acces', 'accès', 'ecrans', 'écrans'],
+    Scanner: ['canscan', 'emargement', 'émargement', 'pointage'],
+    Diffuser: ['canbroadcast', 'annonces', 'diffusion'],
+    'Gérer contenu': ['canmanagecontent', 'gerer contenu', 'contenu'],
+    'Gérer rôles': ['canmanageroles', 'gerer roles', 'roles', 'rôles'],
+    'Gérer intégrations': ['canmanageintegrations', 'gerer integrations', 'integrations', 'intégrations', 'classeur'],
+    Exporter: ['canexport', 'export'],
+    'Voir tous les avis': ['canseeallfeedback', 'avis', 'feedbacks', 'voir tous les feedbacks'],
+    Importer: ['canimportdata', 'import'],
+  },
+  notes: [
+    "L'ID sert de clé : c'est lui qu'on écrit dans la colonne « Rôle » de la feuille Participants. Le changer orpheline les comptes qui le portaient.",
+    "Les six rôles livrés ne peuvent être ni renommés d'identifiant ni supprimés ; leur libellé et leurs droits, si.",
+    "« Espace » choisit le tableau de bord réutilisé : admin, organizer, speaker, volunteer ou attendee.",
+    "« Onglets » accepte « tous », ou une liste séparée par des virgules parmi : schedule, announcements, discussions, dashboard, networking, profile, badge, ai-guide.",
+    "Les droits s'écrivent oui / non (vrai / faux et 1 / 0 sont acceptés).",
+    "Au moins un rôle doit garder « Gérer rôles » à oui, sans quoi plus personne ne pourrait modifier cette feuille depuis l'application.",
+  ],
+};
+
 export const SHEET_TEMPLATES: SheetTemplate[] = [
   PROFILES_TEMPLATE,
   SESSIONS_TEMPLATE,
@@ -613,6 +716,8 @@ export const SHEET_TEMPLATES: SheetTemplate[] = [
   FEEDBACKS_TEMPLATE,
   ANNOUNCEMENTS_TEMPLATE,
   MESSAGES_TEMPLATE,
+  CONFIG_TEMPLATE,
+  ROLES_TEMPLATE,
 ];
 
 export function findTemplate(tab: string): SheetTemplate | undefined {

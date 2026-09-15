@@ -34,7 +34,7 @@ import { syncSessionToGoogle, downloadIcsFile } from '../services/calendarServic
 import { notificationService } from '../services/notificationService';
 import { rowsToParticipants, rowsToSessions } from '../services/sheetsDb';
 import * as api from '../services/api';
-import { ROLE_LABELS, RoleCapabilities, capabilitiesFor } from '../permissions';
+import { RoleCapabilities, capabilitiesFor, labelForRole } from '../permissions';
 import { normalizeEmail } from '../lib/sheets';
 
 interface EventContextType {
@@ -1019,7 +1019,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       applyAuthPayload(payload);
 
       return payload.changed
-        ? `Votre rôle a été mis à jour : ${ROLE_LABELS[payload.session.role]}.`
+        ? `Votre rôle a été mis à jour : ${labelForRole(payload.session.role)}.`
         : 'Votre rôle est déjà à jour.';
     } catch (error: any) {
       // Compte suspendu ou session expiree : le serveur nous a deconnectes.
@@ -1089,7 +1089,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       confetti({ particleCount: 40, spread: 55, origin: { y: 0.5 } });
     } catch (e) {}
 
-    const roleLabel = ROLE_LABELS[role];
+    const roleLabel = labelForRole(role);
     const sessionNote =
       result.sessionsUpdated > 0
         ? ` ${result.sessionsUpdated} session(s) ouverte(s) mise(s) à jour immédiatement.`

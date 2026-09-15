@@ -7,16 +7,24 @@ import { AttendeeDashboard } from './AttendeeDashboard';
 import { SuperAdminSettings } from '../SuperAdminSettings';
 import { RoleAccessPanel } from '../RoleAccessPanel';
 import { Eye, ShieldCheck, Sparkles, LifeBuoy, User, Settings, Handshake } from 'lucide-react';
-import { ParticipantRole } from '../../types';
-import { ROLE_LABELS } from '../../permissions';
+import { DashboardKind } from '../../types';
+import { labelForRole, roleFor, getActiveRoles } from '../../permissions';
+import { classesActives } from '../../roleAccents';
 
-const PREVIEW_ROLES: { role: ParticipantRole; icon: typeof ShieldCheck; activeClass: string }[] = [
-  { role: 'organizer', icon: ShieldCheck, activeClass: 'bg-amber-500 text-stone-950 shadow-xs' },
-  { role: 'speaker', icon: Sparkles, activeClass: 'bg-indigo-600 text-white shadow-xs' },
-  { role: 'volunteer', icon: LifeBuoy, activeClass: 'bg-emerald-600 text-white shadow-xs' },
-  { role: 'attendee', icon: User, activeClass: 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 shadow-xs' },
-  { role: 'sponsor', icon: Handshake, activeClass: 'bg-purple-600 text-white shadow-xs' },
-];
+/**
+ * Icone associee a chaque forme d'espace.
+ *
+ * Elle suit l'espace et non le role : un role cree pour l'occasion herite ainsi
+ * de l'icone de l'espace qu'il reutilise, sans que personne ait a en choisir
+ * une.
+ */
+const ICONE_PAR_ESPACE: Record<DashboardKind, typeof ShieldCheck> = {
+  admin: Settings,
+  organizer: ShieldCheck,
+  speaker: Sparkles,
+  volunteer: LifeBuoy,
+  attendee: User,
+};
 
 /**
  * Affiche le tableau de bord correspondant au role effectif.
@@ -28,7 +36,10 @@ const PREVIEW_ROLES: { role: ParticipantRole; icon: typeof ShieldCheck; activeCl
 export const RoleDashboardRouter: React.FC = () => {
   const { realRole, effectiveRole, previewRole, setPreviewRole } = useEvent();
 
-  const isSuperAdmin = realRole === 'super-admin';
+  // La barre de previsualisation appartient a qui attribue les roles, ce qui
+  // reste vrai si l'evenement renomme ce role ou en cree un autre aussi large.
+  const isSuperAdmin = roleFor(realRole).canManageRoles;
+  const espace = roleFor(effectiveRole).dashboard;
 
   return (
     <div className="space-y-4">
@@ -54,43 +65,58 @@ export const RoleDashboardRouter: React.FC = () => {
                 <span>Mon rôle (Super-Admin)</span>
               </button>
 
-              {PREVIEW_ROLES.map(({ role, icon: Icon, activeClass }) => (
-                <button
-                  key={role}
-                  onClick={() => setPreviewRole(role)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    previewRole === role
-                      ? activeClass
-                      : 'text-stone-600 dark:text-stone-300 hover:bg-stone-200/70 dark:hover:bg-stone-800'
-                  }`}
-                >
-                  <Icon size={14} />
-                  <span>{ROLE_LABELS[role]}</span>
-                </button>
-              ))}
+              {/*
+                * Tous les roles de l'evenement sauf le sien : previsualiser
+                * son propre role n'apprendrait rien, et le bouton « Mon role »
+                * ci-dessus y ramene deja.
+                */}
+              {getActiveRoles()
+                .filter(item => item.id !== realRole)
+                .map(item => {
+                  const Icon = ICONE_PAR_ESPACE[item.dashboard] || User;
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setPreviewRole(item.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        previewRole === item.id
+                          ? classesActives(item.id)
+                          : 'text-stone-600 dark:text-stone-300 hover:bg-stone-200/70 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      <Icon size={14} />
+                      <span>{labelForRole(item.id)}</span>
+                    </button>
+                  );
+                })}
             </div>
           </div>
 
           {previewRole && (
             <p className="mt-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-[11px] font-bold text-amber-900 dark:text-amber-200">
-              Vous voyez l&apos;application telle que la verrait un {ROLE_LABELS[previewRole]}. Votre rôle réel reste
+              Vous voyez l&apos;application telle que la verrait un {labelForRole(previewRole)}. Votre rôle réel reste
               Super-Admin.
             </p>
           )}
         </div>
       )}
 
-      {/* Tableau de bord du role effectif */}
-      {effectiveRole === 'super-admin' && (
+      {/*
+        * L'espace affiche depend de la forme choisie pour le role, et non de
+        * son identifiant : c'est ce qui permet a un role cree librement d'avoir
+        * un espace sans qu'on ecrive un composant pour lui.
+        */}
+      {espace === 'admin' && (
         <>
           <RoleAccessPanel />
           <SuperAdminSettings />
         </>
       )}
-      {effectiveRole === 'organizer' && <OrganizerDashboard />}
-      {effectiveRole === 'speaker' && <SpeakerDashboard />}
-      {effectiveRole === 'volunteer' && <VolunteerDashboard />}
-      {(effectiveRole === 'attendee' || effectiveRole === 'sponsor') && <AttendeeDashboard />}
+      {espace === 'organizer' && <OrganizerDashboard />}
+      {espace === 'speaker' && <SpeakerDashboard />}
+      {espace === 'volunteer' && <VolunteerDashboard />}
+      {espace === 'attendee' && <AttendeeDashboard />}
     </div>
   );
 };

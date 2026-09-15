@@ -13,17 +13,10 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
-import { ASSIGNABLE_ROLES, ROLE_LABELS } from '../permissions';
+import { assignableRoles, labelForRole } from '../permissions';
+import { classesDiscretes } from '../roleAccents';
 import { ParticipantRole, AccountStatus } from '../types';
 
-const ROLE_BADGE_CLASSES: Record<ParticipantRole, string> = {
-  'super-admin': 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 border-red-300 dark:border-red-800',
-  organizer: 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-800',
-  speaker: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
-  volunteer: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
-  attendee: 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-300 dark:border-stone-700',
-  sponsor: 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-800',
-};
 
 const STATUS_LABELS: Record<AccountStatus, string> = {
   active: 'Actif',
@@ -172,12 +165,12 @@ export const RoleAccessPanel: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-1.5 mt-4 pt-4 border-t border-white/10">
-          {ASSIGNABLE_ROLES.map(role => (
+          {assignableRoles().map(role => (
             <span
               key={role}
               className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full font-bold"
             >
-              {ROLE_LABELS[role]} : {roleCounts[role] || 0}
+              {labelForRole(role)} : {roleCounts[role] || 0}
             </span>
           ))}
         </div>
@@ -241,9 +234,9 @@ export const RoleAccessPanel: React.FC = () => {
             onChange={event => setNewRole(event.target.value as ParticipantRole)}
             className={fieldClass}
           >
-            {ASSIGNABLE_ROLES.map(role => (
+            {assignableRoles().map(role => (
               <option key={role} value={role}>
-                {ROLE_LABELS[role]}
+                {labelForRole(role)}
               </option>
             ))}
           </select>
@@ -285,9 +278,9 @@ export const RoleAccessPanel: React.FC = () => {
             className={`${fieldClass} w-auto`}
           >
             <option value="all">Tous les rôles</option>
-            {ASSIGNABLE_ROLES.map(role => (
+            {assignableRoles().map(role => (
               <option key={role} value={role}>
-                {ROLE_LABELS[role]}
+                {labelForRole(role)}
               </option>
             ))}
           </select>
@@ -335,9 +328,9 @@ export const RoleAccessPanel: React.FC = () => {
                 </div>
 
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${ROLE_BADGE_CLASSES[account.role]}`}
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${classesDiscretes(account.role)}`}
                 >
-                  {ROLE_LABELS[account.role]}
+                  {labelForRole(account.role)}
                 </span>
 
                 <select
@@ -346,9 +339,9 @@ export const RoleAccessPanel: React.FC = () => {
                   disabled={isWorking}
                   className="px-2.5 py-1.5 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-[11px] font-bold outline-none focus:border-emerald-600 transition cursor-pointer shrink-0"
                 >
-                  {ASSIGNABLE_ROLES.map(role => (
+                  {assignableRoles().map(role => (
                     <option key={role} value={role}>
-                      {ROLE_LABELS[role]}
+                      {labelForRole(role)}
                     </option>
                   ))}
                 </select>

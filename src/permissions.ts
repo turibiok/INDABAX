@@ -1,40 +1,14 @@
-import { ParticipantRole } from './types';
+import {
+  AppTab,
+  BuiltInRole,
+  EventRole,
+  EventTerminology,
+  ParticipantRole,
+  RoleCapabilities,
+} from './types';
 
-/** Onglets de navigation de l'application. */
-export type AppTab =
-  | 'schedule'
-  | 'announcements'
-  | 'discussions'
-  | 'dashboard'
-  | 'networking'
-  | 'profile'
-  | 'badge'
-  | 'ai-guide';
-
-export interface RoleCapabilities {
-  /** Libelle du role affiche dans l'interface. */
-  label: string;
-  /** Libelle de l'onglet "Mon Espace" pour ce role. */
-  dashboardLabel: string;
-  /** Onglets visibles pour ce role. */
-  tabs: AppTab[];
-  /** Peut scanner les QR codes et valider les presences. */
-  canScan: boolean;
-  /** Peut publier des annonces a tout l'evenement. */
-  canBroadcast: boolean;
-  /** Peut creer / modifier / supprimer sessions, participants, annonces. */
-  canManageContent: boolean;
-  /** Peut attribuer les roles aux emails (Super-Admin uniquement). */
-  canManageRoles: boolean;
-  /** Peut lier le classeur Google Sheet et lancer les synchronisations. */
-  canManageIntegrations: boolean;
-  /** Peut exporter les donnees (CSV / JSON). */
-  canExport: boolean;
-  /** Peut consulter tous les feedbacks, pas seulement les siens. */
-  canSeeAllFeedback: boolean;
-  /** Peut importer des donnees en masse. */
-  canImportData: boolean;
-}
+// Reexportes : le serveur et plusieurs ecrans les importent depuis ici.
+export type { AppTab, RoleCapabilities, EventRole };
 
 const ALL_TABS: AppTab[] = [
   'schedule',
@@ -47,10 +21,21 @@ const ALL_TABS: AppTab[] = [
   'ai-guide',
 ];
 
-export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
-  'super-admin': {
+/**
+ * Les six roles livres avec l'application.
+ *
+ * Ils servent de point de depart a tout nouvel evenement, et de filet quand la
+ * configuration ne declare rien : un evenement deja en cours continue donc de
+ * fonctionner exactement comme avant.
+ */
+export const DEFAULT_ROLES: EventRole[] = [
+  {
+    id: 'super-admin',
     label: 'Super-Admin',
     dashboardLabel: 'Super-Admin & Paramètres',
+    dashboard: 'admin',
+    accent: 'rouge',
+    builtIn: true,
     tabs: ALL_TABS,
     canScan: true,
     canBroadcast: true,
@@ -61,9 +46,13 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
     canSeeAllFeedback: true,
     canImportData: true,
   },
-  organizer: {
+  {
+    id: 'organizer',
     label: 'Organisateur',
     dashboardLabel: 'Espace Organisateur',
+    dashboard: 'organizer',
+    accent: 'ambre',
+    builtIn: true,
     tabs: ALL_TABS,
     canScan: true,
     canBroadcast: true,
@@ -74,10 +63,14 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
     canSeeAllFeedback: true,
     canImportData: true,
   },
-  speaker: {
+  {
+    id: 'speaker',
     label: 'Conférencier',
     dashboardLabel: 'Espace Conférencier',
-    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'profile', 'badge', 'ai-guide'],
+    dashboard: 'speaker',
+    accent: 'indigo',
+    builtIn: true,
+    tabs: ALL_TABS,
     canScan: false,
     canBroadcast: false,
     canManageContent: false,
@@ -87,9 +80,13 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
     canSeeAllFeedback: false,
     canImportData: false,
   },
-  volunteer: {
+  {
+    id: 'volunteer',
     label: 'Volontaire',
     dashboardLabel: 'Espace Volontaire',
+    dashboard: 'volunteer',
+    accent: 'emeraude',
+    builtIn: true,
     tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'profile', 'badge', 'ai-guide'],
     canScan: true,
     canBroadcast: false,
@@ -100,10 +97,14 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
     canSeeAllFeedback: false,
     canImportData: false,
   },
-  attendee: {
+  {
+    id: 'attendee',
     label: 'Participant',
     dashboardLabel: 'Mon Espace',
-    tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'profile', 'badge', 'ai-guide'],
+    dashboard: 'attendee',
+    accent: 'ardoise',
+    builtIn: true,
+    tabs: ALL_TABS,
     canScan: false,
     canBroadcast: false,
     canManageContent: false,
@@ -113,9 +114,13 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
     canSeeAllFeedback: false,
     canImportData: false,
   },
-  sponsor: {
+  {
+    id: 'sponsor',
     label: 'Sponsor / Partenaire',
     dashboardLabel: 'Espace Partenaire',
+    dashboard: 'attendee',
+    accent: 'violet',
+    builtIn: true,
     tabs: ['schedule', 'announcements', 'discussions', 'dashboard', 'networking', 'profile', 'badge'],
     canScan: false,
     canBroadcast: false,
@@ -126,31 +131,121 @@ export const ROLE_CAPABILITIES: Record<ParticipantRole, RoleCapabilities> = {
     canSeeAllFeedback: false,
     canImportData: false,
   },
-};
+];
 
-export function capabilitiesFor(role: ParticipantRole): RoleCapabilities {
-  return ROLE_CAPABILITIES[role] || ROLE_CAPABILITIES.attendee;
-}
-
-export function canAccessTab(role: ParticipantRole, tab: string): boolean {
-  return capabilitiesFor(role).tabs.includes(tab as AppTab);
-}
-
-/** Libelles courts utilises dans les badges et listes deroulantes. */
-export const ROLE_LABELS: Record<ParticipantRole, string> = {
-  'super-admin': 'Super-Admin',
-  organizer: 'Organisateur',
-  speaker: 'Conférencier',
-  volunteer: 'Volontaire',
-  attendee: 'Participant',
-  sponsor: 'Sponsor',
-};
-
-export const ASSIGNABLE_ROLES: ParticipantRole[] = [
+/** Identifiants des roles fournis, pour les distinguer de ceux qu'on cree. */
+export const BUILT_IN_ROLE_IDS: BuiltInRole[] = [
   'attendee',
   'speaker',
-  'volunteer',
   'organizer',
+  'volunteer',
   'sponsor',
   'super-admin',
 ];
+
+/** Le role applique a qui n'en a pas, ou dont le role a ete supprime. */
+export const FALLBACK_ROLE_ID = 'attendee';
+
+/**
+ * Table des roles en vigueur.
+ *
+ * Le module la garde parce que `capabilitiesFor` est appelee partout, y compris
+ * dans des composants qui n'ont pas acces au contexte. Le serveur la remplit
+ * depuis la configuration de l'evenement au demarrage ; le navigateur la
+ * remplit a la reception de cette meme configuration. Les deux copies viennent
+ * donc de la meme source, mais seule celle du serveur fait autorite.
+ */
+let activeRoles: EventRole[] = DEFAULT_ROLES;
+
+/**
+ * Installe les roles de l'evenement.
+ *
+ * Une liste vide est ignoree plutot qu'appliquee : perdre la table des roles
+ * priverait tout le monde de ses droits, y compris de quoi la retablir.
+ */
+export function setActiveRoles(roles: EventRole[] | undefined | null): EventRole[] {
+  activeRoles = roles && roles.length > 0 ? roles : DEFAULT_ROLES;
+  return activeRoles;
+}
+
+export function getActiveRoles(): EventRole[] {
+  return activeRoles;
+}
+
+/**
+ * Droits d'un role.
+ *
+ * Un role inconnu — supprime depuis, ou mal orthographie dans le classeur —
+ * retombe sur le role le plus restreint plutot que d'echouer : mieux vaut un
+ * participant qui voit trop peu qu'un compte sans aucun droit, ou pire, un
+ * appel qui leve au milieu d'une verification d'autorisation.
+ */
+export function capabilitiesFor(
+  role: ParticipantRole,
+  roles: EventRole[] = activeRoles,
+): RoleCapabilities {
+  const trouve = roles.find(item => item.id === role);
+  if (trouve) return trouve;
+
+  const repli = roles.find(item => item.id === FALLBACK_ROLE_ID);
+  if (repli) return repli;
+
+  return DEFAULT_ROLES[DEFAULT_ROLES.length - 2];
+}
+
+/** Definition complete d'un role, y compris son espace et sa teinte. */
+export function roleFor(
+  role: ParticipantRole,
+  roles: EventRole[] = activeRoles,
+): EventRole {
+  return (
+    roles.find(item => item.id === role) ||
+    roles.find(item => item.id === FALLBACK_ROLE_ID) ||
+    DEFAULT_ROLES[DEFAULT_ROLES.length - 2]
+  );
+}
+
+export function canAccessTab(
+  role: ParticipantRole,
+  tab: string,
+  roles: EventRole[] = activeRoles,
+): boolean {
+  return capabilitiesFor(role, roles).tabs.includes(tab as AppTab);
+}
+
+/** Libelle court d'un role, pour les badges et les listes deroulantes. */
+export function labelForRole(
+  role: ParticipantRole,
+  roles: EventRole[] = activeRoles,
+): string {
+  return capabilitiesFor(role, roles).label;
+}
+
+/** Roles qu'un organisateur peut attribuer a un compte. */
+export function assignableRoles(roles: EventRole[] = activeRoles): ParticipantRole[] {
+  return roles.map(item => item.id);
+}
+
+/**
+ * Mots employes par defaut : ceux d'une conference, puisque c'est ce que
+ * l'application servait jusqu'ici.
+ */
+export const DEFAULT_TERMINOLOGY: EventTerminology = {
+  session: 'session',
+  sessions: 'sessions',
+  checkIn: 'émargement',
+  checkIns: 'émargements',
+  schedule: 'programme',
+  room: 'salle',
+  rooms: 'salles',
+  track: 'thématique',
+  tracks: 'thématiques',
+  badge: 'badge',
+  feedback: 'avis',
+  feedbacks: 'avis',
+};
+
+/** Met une majuscule initiale, sans toucher au reste du mot. */
+export function capitaliser(mot: string): string {
+  return mot ? mot.charAt(0).toUpperCase() + mot.slice(1) : mot;
+}

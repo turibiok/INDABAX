@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { useEvent } from '../context/EventContext';
 import { Logo } from './Logo';
-import { AppTab, ROLE_LABELS } from '../permissions';
+import { AppTab, labelForRole } from '../permissions';
 import { PasswordChangeModal } from './PasswordChangeModal';
 
 export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner }) => {
@@ -288,7 +288,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
                     ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
                     : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'
                 }`}>
-                  {ROLE_LABELS[effectiveRole]}
+                  {labelForRole(effectiveRole)}
                 </span>
               </button>
 
@@ -306,7 +306,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
 
                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                       <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                        Rôle attribué : {ROLE_LABELS[realRole]}
+                        Rôle attribué : {labelForRole(realRole)}
                       </span>
                       {authSession?.source === 'sheet' && (
                         <span className="text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 px-2 py-0.5 rounded-full font-bold">
@@ -319,7 +319,7 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
                   {previewRole && (
                     <div className="mx-1 mb-1 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800">
                       <p className="text-[10px] font-bold text-amber-900 dark:text-amber-200">
-                        Prévisualisation « {ROLE_LABELS[previewRole]} » active.
+                        Prévisualisation « {labelForRole(previewRole)} » active.
                       </p>
                       <button
                         onClick={() => {

@@ -2,25 +2,18 @@ import React from 'react';
 
 import { ParticipantRole } from '../types';
 import { capabilitiesFor } from '../permissions';
+import { classesPleines } from '../roleAccents';
 
 /**
  * Pastille du rôle d'une personne.
  *
  * Les annonces et les discussions traduisaient chacune les rôles de leur
  * côté, avec des listes incomplètes : un Super-Admin y apparaissait comme
- * « Membre », et un sponsor aussi. Le libellé vient désormais de
- * `ROLE_CAPABILITIES`, qui est déjà la référence côté serveur : un rôle
- * ajouté là se nomme correctement ici sans autre intervention.
+ * « Membre », et un sponsor aussi. Le libellé comme la couleur viennent
+ * désormais de la table des rôles de l'événement, qui est déjà la référence
+ * côté serveur : un rôle créé là s'affiche correctement ici sans autre
+ * intervention.
  */
-
-const COLORS: Record<ParticipantRole, string> = {
-  'super-admin': 'bg-rose-600 text-white',
-  organizer: 'bg-amber-500 text-white',
-  speaker: 'bg-indigo-600 text-white',
-  volunteer: 'bg-emerald-600 text-white',
-  sponsor: 'bg-sky-700 text-white',
-  attendee: 'bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200',
-};
 
 interface RoleBadgeProps {
   role: ParticipantRole;
@@ -33,7 +26,7 @@ export const RoleBadge: React.FC<RoleBadgeProps> = ({ role, compact = false }) =
   const size = compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]';
 
   return (
-    <span className={`rounded font-bold uppercase tracking-wider shrink-0 ${size} ${COLORS[role]}`}>
+    <span className={`rounded font-bold uppercase tracking-wider shrink-0 ${size} ${classesPleines(role)}`}>
       {label}
     </span>
   );

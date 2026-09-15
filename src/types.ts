@@ -37,7 +37,75 @@ export interface Session {
   currentAttendees: number;
 }
 
-export type ParticipantRole = 'attendee' | 'speaker' | 'organizer' | 'volunteer' | 'sponsor' | 'super-admin';
+/**
+ * Identifiant d'un role. Volontairement ouvert : chaque evenement definit les
+ * siens, et un stage de secourisme n'a pas les memes qu'un colloque.
+ *
+ * Les six identifiants ci-dessous restent fournis d'origine, parce qu'ils
+ * portent les tableaux de bord existants et les comptes deja enregistres.
+ */
+export type ParticipantRole = string;
+
+/** Les roles livres avec l'application, toujours presents. */
+export type BuiltInRole =
+  | 'attendee'
+  | 'speaker'
+  | 'organizer'
+  | 'volunteer'
+  | 'sponsor'
+  | 'super-admin';
+
+/**
+ * Espace personnel affiche pour un role.
+ *
+ * Un role librement cree doit choisir lequel il reutilise : ecrire un
+ * tableau de bord par role nouveau serait hors de portee des organisateurs,
+ * alors que ces cinq formes couvrent ce qu'on rencontre.
+ */
+export type DashboardKind = 'admin' | 'organizer' | 'speaker' | 'volunteer' | 'attendee';
+
+/** Onglets de navigation de l'application. */
+export type AppTab =
+  | 'schedule'
+  | 'announcements'
+  | 'discussions'
+  | 'dashboard'
+  | 'networking'
+  | 'profile'
+  | 'badge'
+  | 'ai-guide';
+
+/**
+ * Ce qu'un role permet de faire.
+ *
+ * Ces champs vivent ici, et non aupres des roles fournis, parce que le serveur
+ * s'en sert pour autoriser chaque requete : ils decrivent des droits reels, pas
+ * un affichage.
+ */
+export interface RoleCapabilities {
+  /** Libelle du role affiche dans l'interface. */
+  label: string;
+  /** Libelle de l'onglet "Mon Espace" pour ce role. */
+  dashboardLabel: string;
+  /** Onglets visibles pour ce role. */
+  tabs: AppTab[];
+  /** Peut scanner les QR codes et valider les presences. */
+  canScan: boolean;
+  /** Peut publier des annonces a tout l'evenement. */
+  canBroadcast: boolean;
+  /** Peut creer / modifier / supprimer sessions, participants, annonces. */
+  canManageContent: boolean;
+  /** Peut attribuer les roles aux emails, et definir les roles eux-memes. */
+  canManageRoles: boolean;
+  /** Peut lier le classeur Google Sheet et lancer les synchronisations. */
+  canManageIntegrations: boolean;
+  /** Peut exporter les donnees (CSV / JSON). */
+  canExport: boolean;
+  /** Peut consulter tous les feedbacks, pas seulement les siens. */
+  canSeeAllFeedback: boolean;
+  /** Peut importer des donnees en masse. */
+  canImportData: boolean;
+}
 
 export interface Participant {
   id: string;
@@ -369,5 +437,88 @@ export interface EventConfig {
   sessionReminderMinutes: number;
   /** Liens Google Doc / Sheet / Slides publies dans l'application. */
   docLinks: DocLink[];
+  /**
+   * Roles de cet evenement et droits de chacun.
+   *
+   * Vide, l'application retombe sur les six roles fournis : un evenement
+   * existant continue donc de fonctionner sans rien declarer.
+   */
+  roles: EventRole[];
+  /** Mots employes par l'interface, pour coller au type d'evenement. */
+  terminology: EventTerminology;
+  /** Identite visuelle : logo et couleurs. */
+  branding: EventBranding;
 }
 
+/**
+ * Un role tel que l'evenement le definit.
+ *
+ * Les droits sont portes par le role lui-meme plutot que deduits de son nom :
+ * c'est ce qui permet d'en creer librement sans toucher au code, et c'est le
+ * serveur qui tranche, jamais le navigateur.
+ */
+export interface EventRole extends RoleCapabilities {
+  /** Identifiant stable, ecrit dans le classeur et dans les sessions. */
+  id: string;
+  /** Espace personnel reutilise par ce role. */
+  dashboard: DashboardKind;
+  /** Teinte du badge, parmi une liste fermee pour rester lisible. */
+  accent: RoleAccent;
+  /**
+   * Role fourni d'origine : son identifiant ne peut pas etre change ni
+   * supprime, sans quoi les comptes deja enregistres perdraient leur role.
+   */
+  builtIn?: boolean;
+}
+
+/** Teintes proposees pour les badges de role. */
+export type RoleAccent =
+  | 'rouge'
+  | 'ambre'
+  | 'indigo'
+  | 'emeraude'
+  | 'violet'
+  | 'ardoise'
+  | 'ciel'
+  | 'rose';
+
+/**
+ * Les mots de l'interface.
+ *
+ * « Conference » n'a pas de conferenciers dans un tournoi ni de sessions dans
+ * un mariage. Chaque champ porte le mot au singulier et au pluriel, faute de
+ * quoi le francais oblige a des tournures qui se voient.
+ */
+export interface EventTerminology {
+  /** « session » / « sessions » — l'unite du programme. */
+  session: string;
+  sessions: string;
+  /** « émargement » / « émargements » — le pointage des presences. */
+  checkIn: string;
+  checkIns: string;
+  /** « programme » — la vue d'ensemble du deroule. */
+  schedule: string;
+  /** « salle » / « salles » — les lieux ou se tiennent les sessions. */
+  room: string;
+  rooms: string;
+  /** « thématique » / « thématiques » — le classement des sessions. */
+  track: string;
+  tracks: string;
+  /** « badge » — le laissez-passer personnel. */
+  badge: string;
+  /** « avis » — les retours laisses sur une session. */
+  feedback: string;
+  feedbacks: string;
+}
+
+/** Identite visuelle de l'evenement. */
+export interface EventBranding {
+  /** Logo affiche sur fond clair. Vide : celui livre avec l'application. */
+  logoUrl: string;
+  /** Variante pour fond sombre, quand le logo clair y disparaitrait. */
+  logoDarkUrl: string;
+  /** Couleur dominante, en hexadecimal. */
+  primaryColor: string;
+  /** Couleur d'accent, en hexadecimal. */
+  accentColor: string;
+}

@@ -6,6 +6,8 @@ import { authRouter } from "./server/routes/auth";
 import { sheetsRouter } from "./server/routes/sheets";
 import { aiRouter } from "./server/routes/ai";
 import { socialRouter } from "./server/routes/social";
+import { eventRouter } from "./server/routes/event";
+import { reloadEventConfig } from "./server/eventConfig";
 import { warmSocialCache } from "./server/social";
 import {
   ensureSuperAdmin,
@@ -46,6 +48,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/sheets", sheetsRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/social", socialRouter);
+app.use("/api/event", eventRouter);
 
 async function startServer() {
   await initStore();
@@ -113,6 +116,30 @@ async function startServer() {
       sheets.isLinked
         ? `Classeur Google Sheet lié, onglet des comptes « ${sheets.profilesTab} ».`
         : "Aucun classeur lié : connectez-vous puis renseignez le lien dans l'espace Super-Admin.",
+    );
+  }
+
+  // La configuration de l'événement est lue avant d'ouvrir le service : le
+  // tout premier visiteur doit voir le bon nom d'événement et les bons rôles,
+  // et c'est cette table de rôles qui autorisera ensuite chaque requête.
+  try {
+    const { config, avertissements } = await reloadEventConfig();
+
+    console.log(
+      config.fromSheet
+        ? `Événement « ${config.identity.eventName} ${config.identity.edition} » : ` +
+            `${config.roles.length} rôle(s) lus dans le classeur.`
+        : `Aucun onglet « Configuration » ni « Rôles » dans le classeur : ` +
+            `les six rôles livrés s'appliquent.`,
+    );
+
+    for (const avertissement of avertissements) console.warn(`  ${avertissement}`);
+  } catch (error) {
+    // Une configuration illisible ne doit pas empêcher le service de démarrer :
+    // les valeurs livrées suffisent à se connecter et à la corriger.
+    console.warn(
+      `Configuration de l'événement illisible, valeurs livrées appliquées : ` +
+        `${error instanceof Error ? error.message : String(error)}`,
     );
   }
 

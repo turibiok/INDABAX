@@ -1,6 +1,7 @@
 import { Session, Participant, CheckInRecord, SessionFeedback, EventConfig ,
   UserAccount
 } from '../types';
+import { DEFAULT_TERMINOLOGY } from '../permissions';
 
 export const INITIAL_SESSIONS: Session[] = [
   {
@@ -686,7 +687,18 @@ export const INITIAL_EVENT_CONFIG: EventConfig = {
       kind: "doc",
       visibleTo: ["volunteer", "organizer", "super-admin"]
     }
-  ]
+  ],
+    // Vides : les six roles fournis et les mots d'une conference
+    // s'appliquent. Un evenement qui veut les siens les declare dans son
+    // classeur ; l'application ne les invente pas ici.
+    roles: [],
+    terminology: DEFAULT_TERMINOLOGY,
+    branding: {
+      logoUrl: "",
+      logoDarkUrl: "",
+      primaryColor: "#047857",
+      accentColor: "#d97706"
+    }
 };
 
 /**
