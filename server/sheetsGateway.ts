@@ -162,6 +162,7 @@ export async function readTab(
   tab: string | undefined,
   config?: ServerSheetsConfig,
   expectedHeaders?: string[],
+  options: { strictName?: boolean } = {},
 ): Promise<SheetTable> {
   const sheets = config || getSheetsConfig();
 
@@ -201,6 +202,23 @@ export async function readTab(
   if (!expectedHeaders || expectedHeaders.length === 0) return byName;
 
   if (scoreHeaders(byName.headers, expectedHeaders) >= STRONG_MATCH) return byName;
+
+  /*
+   * Certains onglets ne doivent surtout pas etre devines.
+   *
+   * Google repond HTTP 200 avec l'onglet par defaut quand le nom demande
+   * n'existe pas : la recherche par colonnes qui suit peut alors s'arreter sur
+   * un onglet qui n'a rien a voir. Pour un onglet facultatif comme « Roles »,
+   * cela revenait a lire les droits de chacun dans la feuille des messages.
+   * Mieux vaut dire qu'il est absent.
+   */
+  if (options.strictName) {
+    throw new SheetError(
+      `L'onglet « ${ref.tab} » est absent du classeur.`,
+      404,
+      'tab_not_found',
+    );
+  }
 
   // Le nom n'a pas été honoré : on identifie l'onglet à ses colonnes.
   const gids = await discoverGids(spreadsheetId);

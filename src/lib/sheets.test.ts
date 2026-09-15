@@ -55,17 +55,17 @@ console.log('\n--- buildCsvUrl ---');
 check(
   'par nom d onglet',
   buildCsvUrl('ID1', { tab: 'Utilisateurs' }),
-  'https://docs.google.com/spreadsheets/d/ID1/gviz/tq?tqx=out%3Acsv&sheet=Utilisateurs',
+  'https://docs.google.com/spreadsheets/d/ID1/gviz/tq?tqx=out%3Acsv&headers=1&sheet=Utilisateurs',
 );
 check(
   'par gid (prioritaire)',
   buildCsvUrl('ID1', { tab: 'Ignore', gid: '42' }),
-  'https://docs.google.com/spreadsheets/d/ID1/gviz/tq?tqx=out%3Acsv&gid=42',
+  'https://docs.google.com/spreadsheets/d/ID1/gviz/tq?tqx=out%3Acsv&headers=1&gid=42',
 );
 check(
   'onglet avec espace',
   buildCsvUrl('ID1', { tab: 'Check ins' }),
-  'https://docs.google.com/spreadsheets/d/ID1/gviz/tq?tqx=out%3Acsv&sheet=Check+ins',
+  'https://docs.google.com/spreadsheets/d/ID1/gviz/tq?tqx=out%3Acsv&headers=1&sheet=Check+ins',
 );
 
 console.log('\n--- isAllowedGoogleUrl (anti-SSRF) ---');

@@ -509,7 +509,7 @@ export async function reloadEventConfig(): Promise<{
   let trouve = false;
 
   try {
-    const table = await readTab(ONGLET_CONFIG, sheets, ['Clé', 'Valeur']);
+    const table = await readTab(ONGLET_CONFIG, sheets, ['Clé', 'Valeur'], { strictName: true });
     const lu = configDepuisLignes(table.rows);
     identity = lu.identity;
     settings = lu.settings;
@@ -524,7 +524,7 @@ export async function reloadEventConfig(): Promise<{
   }
 
   try {
-    const table = await readTab(ONGLET_ROLES, sheets, ['ID', 'Libellé']);
+    const table = await readTab(ONGLET_ROLES, sheets, ['ID', 'Libellé'], { strictName: true });
     const lu = rolesDepuisLignes(table.rows);
     roles = lu.roles;
     avertissements.push(...lu.avertissements);

@@ -62,7 +62,17 @@ export function buildCsvUrl(
   options: { tab?: string; gid?: string | null } = {},
 ): string {
   const base = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq`;
-  const params = new URLSearchParams({ tqx: 'out:csv' });
+
+  /*
+   * `headers=1` dit a Google que la premiere ligne, et elle seule, porte les
+   * en-tetes.
+   *
+   * Sans cette precision il les devine, et se trompe quand toutes les colonnes
+   * sont du texte : il fusionne alors les deux premieres lignes, produisant des
+   * en-tetes comme « Cle eventName ». L'onglet de configuration, fait de deux
+   * colonnes de texte, tombait exactement dans ce cas et se lisait vide.
+   */
+  const params = new URLSearchParams({ tqx: 'out:csv', headers: '1' });
 
   if (options.gid) {
     params.set('gid', options.gid);
