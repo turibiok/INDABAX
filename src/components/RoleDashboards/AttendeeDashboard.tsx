@@ -70,9 +70,6 @@ export const AttendeeDashboard: React.FC = () => {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Bienvenue, {currentUser.name} !</h1>
-          <p className="text-amber-100 text-sm mt-1 max-w-2xl">
-            Retrouvez votre planning sur-mesure, synchronisez votre Google Calendar en 1 clic, visualisez votre badge et téléchargez votre certificat.
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -149,9 +146,6 @@ export const AttendeeDashboard: React.FC = () => {
             </div>
             <div>
               <h2 className="font-bold text-stone-900 text-base">Synchronisation Google Calendar Automatique</h2>
-              <p className="text-xs text-stone-500">
-                Ajoutez automatiquement vos {mySavedSessions.length} session(s) sélectionnée(s) avec horaires, conférenciers et salles à votre agenda personnel.
-              </p>
             </div>
           </div>
 
@@ -197,9 +191,6 @@ export const AttendeeDashboard: React.FC = () => {
           <div className="text-center py-12 bg-stone-50 rounded-2xl border border-stone-200/60 p-6">
             <Calendar size={36} className="mx-auto text-stone-300 mb-2" />
             <p className="font-semibold text-stone-700 text-sm">Aucune session enregistrée pour le moment</p>
-            <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-              Parcourez le {term.schedule} et cliquez sur le signet pour construire votre agenda personnalisé.
-            </p>
             <button
               onClick={() => setActiveTab('schedule')}
               className="mt-3 px-4 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-amber-600 transition-colors"

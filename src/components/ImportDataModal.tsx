@@ -259,7 +259,6 @@ Mireille Dossou,mireille.d@sèmècity.bj,volunteer,Sèmè City Open Lab,Chef de 
             </div>
             <div>
               <h2 className="font-heading font-black text-lg">Centre d'Importation de Données</h2>
-              <p className="text-xs text-amber-100">Ajout massif de participants, du programme ou des annonces.</p>
             </div>
           </div>
 
@@ -357,7 +356,6 @@ Mireille Dossou,mireille.d@sèmècity.bj,volunteer,Sèmè City Open Lab,Chef de 
               <p className="text-xs font-bold text-stone-800 dark:text-stone-200">
                 {fileName ? `Fichier prêt : ${fileName}` : 'Cliquez pour sélectionner un fichier CSV ou JSON'}
               </p>
-              <p className="text-[10px] text-stone-500 mt-0.5">Formats acceptés : .CSV, .JSON (UTF-8)</p>
             </label>
           </div>
 

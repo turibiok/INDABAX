@@ -150,9 +150,6 @@ export const MyBadgeView: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-heading font-black text-stone-900 dark:text-white">
             Mon Badge Digital & Profil
           </h1>
-          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300">
-            Téléchargez votre badge en PDF haute définition ou présentez ce QR code à l'entrée.
-          </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">

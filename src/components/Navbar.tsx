@@ -164,7 +164,6 @@ export const Navbar: React.FC<{ onOpenScanner: () => void }> = ({ onOpenScanner 
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-stone-600 dark:text-stone-400 font-medium">Deep Learning & IA pour l'Afrique</p>
             </div>
           </div>
 

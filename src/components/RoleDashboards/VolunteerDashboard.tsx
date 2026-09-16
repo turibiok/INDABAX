@@ -72,9 +72,6 @@ export const VolunteerDashboard: React.FC = () => {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Poste d'Accueil & Orientation</h1>
-          <p className="text-emerald-100 text-sm mt-1 max-w-2xl">
-            Scanner les badges des participants, surveiller la saturation des salles et signaler les besoins logistiques en temps réel.
-          </p>
         </div>
 
         <button
@@ -177,7 +174,6 @@ export const VolunteerDashboard: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-stone-900 text-sm">Signaler un Problème ou Besoin Logistique</h3>
-                <p className="text-xs text-stone-500">Notification immédiate aux organisateurs en régie.</p>
               </div>
             </div>
 
@@ -250,7 +246,6 @@ export const VolunteerDashboard: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-stone-900 text-sm">Lignes Directes d'Urgence</h3>
-                <p className="text-xs text-stone-500">Numéros à contacter en cas d'urgence logistique ou médicale.</p>
               </div>
             </div>
 

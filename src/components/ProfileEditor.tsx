@@ -199,7 +199,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({ person, onClose })
           className={champClass}
         />
         <p className="text-[10px] text-stone-400 mt-1">
-          Séparés par des virgules. Ils servent aux suggestions de rencontres.
+          Séparés par des virgules.
         </p>
       </div>
 

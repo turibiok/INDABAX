@@ -207,10 +207,6 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
             </div>
           </div>
 
-          <p className="text-xs text-emerald-100 max-w-md">
-            Le serveur lit et écrit dans un classeur Google Sheet partagé par lien. Aucun projet Google Cloud
-            ni Firebase n&apos;est nécessaire.
-          </p>
         </div>
 
         {/* Onglets */}
@@ -427,10 +423,6 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                   Voir les modèles des cinq feuilles et les télécharger
                 </p>
-                <p className="text-[10px] text-stone-500 mt-1 leading-relaxed">
-                  Colonnes attendues, libellés acceptés et exemples de lignes pour Utilisateurs, Participants,
-                  Sessions, Check-ins et Feedbacks.
-                </p>
               </button>
             </div>
           )}
@@ -439,10 +431,6 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
           {panel === 'templates' && (
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-3 flex-wrap">
-                <p className="text-[11px] text-stone-600 dark:text-stone-400 leading-relaxed max-w-md">
-                  Créez un onglet par feuille dans votre classeur, avec la ligne d&apos;en-têtes indiquée. Les lignes
-                  d&apos;exemple sont là pour montrer le format attendu : remplacez-les par vos données réelles.
-                </p>
 
                 <button
                   onClick={() => downloadAllTemplates()}
@@ -586,10 +574,6 @@ export const SheetsSetupModal: React.FC<SheetsSetupModalProps> = ({ isOpen, onCl
           {/* ---------------- Panneau : documents ---------------- */}
           {panel === 'documents' && (
             <div className="space-y-4">
-              <p className="text-[11px] text-stone-600 dark:text-stone-400 leading-relaxed">
-                Ajoutez les liens Google Doc, Slides ou Form que les participants doivent pouvoir ouvrir depuis
-                l&apos;application (programme, code de conduite, guide des conférenciers…).
-              </p>
 
               <div className="space-y-2">
                 {docLinks.length === 0 && <p className="text-xs text-stone-500 italic">Aucun lien enregistré.</p>}

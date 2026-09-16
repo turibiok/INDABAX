@@ -224,9 +224,6 @@ export const OrganizerDashboard: React.FC = () => {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Supervision & Analyses en Temps Réel</h1>
-          <p className="text-amber-100 text-sm mt-1 max-w-2xl">
-            Taux de participation par session, synthèse des feedbacks, synchronisation Google Sheets et import massif de données.
-          </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -313,9 +310,6 @@ export const OrganizerDashboard: React.FC = () => {
                 Taux de Remplissage & Présence par Session (Temps Réel)
               </h2>
             </div>
-            <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-              Comparaison en direct du nombre d'auditeurs scannés par rapport à la capacité maximale des salles.
-            </p>
           </div>
 
           <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800 p-1 rounded-xl text-xs font-bold">
@@ -398,9 +392,6 @@ export const OrganizerDashboard: React.FC = () => {
                 <h3 className="font-heading font-black text-stone-900 dark:text-white text-base">
                   Synthèse des Feedbacks par Session (Recharts)
                 </h3>
-                <p className="text-xs text-stone-500 dark:text-stone-400">
-                  Notes moyennes sur 5 : Évaluation globale, Pertinence du contenu & Clarté du speaker.
-                </p>
               </div>
             </div>
             <span className="text-xs font-bold font-mono bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-full">
@@ -458,9 +449,6 @@ export const OrganizerDashboard: React.FC = () => {
                 Répartition des Rôles
               </h3>
             </div>
-            <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">
-              Composition globale de la communauté présente.
-            </p>
 
             <div className="h-44 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -505,9 +493,6 @@ export const OrganizerDashboard: React.FC = () => {
             </div>
             <div>
               <h2 className="font-bold text-stone-900 dark:text-white text-base">Base de données Google Sheet</h2>
-              <p className="text-xs text-stone-500 dark:text-stone-400">
-                Lecture et écriture dans le classeur partagé par lien — sans Google Cloud ni Firebase.
-              </p>
             </div>
           </div>
 
@@ -598,7 +583,6 @@ export const OrganizerDashboard: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-stone-900 dark:text-white text-sm">Enregistrement Express sur Place</h3>
-                <p className="text-xs text-stone-500 dark:text-stone-400">Émettre un badge instantané pour les retardataires ou invités VIP.</p>
               </div>
             </div>
 

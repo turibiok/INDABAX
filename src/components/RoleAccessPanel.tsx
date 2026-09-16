@@ -125,11 +125,6 @@ export const RoleAccessPanel: React.FC = () => {
               <ShieldCheck className="w-6 h-6 text-amber-400" />
               Rôles &amp; accès
             </h2>
-            <p className="text-xs text-stone-300 mt-1.5 max-w-xl leading-relaxed">
-              Chaque email reçoit un rôle, et ce rôle détermine l&apos;interface obtenue à la connexion. Le rôle est
-              vérifié par le serveur à chaque requête, jamais par le navigateur. La source de vérité est
-              l&apos;onglet «&nbsp;{sheetsConfig.profilesTab}&nbsp;» du classeur Google Sheet.
-            </p>
           </div>
 
           <div className="flex flex-col items-end gap-2 shrink-0">
@@ -252,11 +247,6 @@ export const RoleAccessPanel: React.FC = () => {
           Enregistrer l&apos;attribution
         </button>
 
-        <p className="text-[11px] text-stone-500 leading-relaxed">
-          Vous désignez un email et un rôle ; la personne choisit elle-même son mot de passe en s&apos;inscrivant
-          avec cet email. Vous n&apos;avez donc jamais à en connaître un, ni à en transmettre. Un compte encore à
-          activer porte une clé rouge dans la liste ci-dessous.
-        </p>
       </div>
 
       {/* Liste des comptes */}

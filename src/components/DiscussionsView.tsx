@@ -135,7 +135,6 @@ export const DiscussionsView: React.FC = () => {
           </div>
           <div>
             <h1 className="text-base font-bold text-stone-900 leading-tight">Discussions & Salons Thématiques</h1>
-            <p className="text-xs text-stone-500">Échangez en direct avec toutes les personnes présentes à {eventConfig.eventName}.</p>
           </div>
         </div>
 
@@ -335,9 +334,6 @@ export const DiscussionsView: React.FC = () => {
               <div className="h-full flex flex-col items-center justify-center text-center p-6 text-stone-400">
                 <MessageSquare size={36} className="text-stone-300 mb-2" />
                 <p className="text-sm font-semibold text-stone-700">Aucun message pour le moment</p>
-                <p className="text-xs text-stone-500 max-w-xs mt-1">
-                  Lancez la discussion ! Présentez-vous ou partagez vos impressions sur la conférence.
-                </p>
                 {isDirectMode && activePartner && (
                   <button
                     onClick={generateIcebreaker}

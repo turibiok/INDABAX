@@ -149,29 +149,22 @@ export const LoginView: React.FC = () => {
   const labelClass =
     'text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400 block mb-1.5';
 
-  const HEADINGS: Record<Mode, { badge: string; title: string; intro: string }> = {
+  const HEADINGS: Record<Mode, { badge: string; title: string }> = {
     signin: {
       badge: 'Accès participant',
       title: 'Connexion',
-      intro:
-        "Saisissez l'adresse email de votre inscription et votre mot de passe. Le rôle que l'organisation vous a assigné détermine votre interface.",
     },
     register: {
       badge: 'Première connexion',
       title: 'Choisir mon mot de passe',
-      intro:
-        "Votre email doit déjà figurer dans la liste des inscrits. Choisissez le mot de passe que vous voulez : personne d'autre ne le connaîtra, pas même les organisateurs.",
     },
     forgot: {
       badge: 'Mot de passe oublié',
       title: 'Recevoir un lien',
-      intro:
-        "Saisissez votre email : vous recevrez un lien pour choisir un nouveau mot de passe. Le lien est valable une heure et ne fonctionne qu'une fois.",
     },
     reset: {
       badge: 'Nouveau mot de passe',
       title: 'Réinitialisation',
-      intro: 'Choisissez votre nouveau mot de passe. Ce lien ne sera plus utilisable ensuite.',
     },
   };
 
@@ -224,9 +217,6 @@ export const LoginView: React.FC = () => {
                 className="w-full max-w-[280px] h-auto mb-6"
               />
 
-              <p className="text-emerald-100 text-sm font-medium">
-                Deep Learning &amp; IA pour l&apos;Afrique de l&apos;Ouest.
-              </p>
 
               <p className="text-emerald-200/80 text-xs mt-5 leading-relaxed">{eventConfig.themeDescription}</p>
             </div>
@@ -266,7 +256,6 @@ export const LoginView: React.FC = () => {
                 {heading.badge}
               </span>
               <h2 className="font-heading font-black text-2xl mt-3">{heading.title}</h2>
-              <p className="text-xs text-stone-600 dark:text-stone-400 mt-1.5 leading-relaxed">{heading.intro}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -460,17 +449,6 @@ export const LoginView: React.FC = () => {
                 </span>
               </div>
 
-              <p className="text-[11px] text-stone-500 dark:text-stone-500 flex items-start gap-1.5 leading-relaxed">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-px" />
-                Email non reconnu ? Écrivez à{' '}
-                <a
-                  href={`mailto:${eventConfig.contactEmail}`}
-                  className="text-emerald-700 dark:text-emerald-400 font-bold hover:underline"
-                >
-                  {eventConfig.contactEmail}
-                </a>{' '}
-                pour être ajouté à la liste des inscrits.
-              </p>
 
               {!isSheetsLinked && (
                 <p className="text-[11px] text-stone-500 dark:text-stone-500 flex items-start gap-1.5 leading-relaxed">

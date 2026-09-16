@@ -124,9 +124,6 @@ export const NetworkingView: React.FC<{ onOpenQRScanner: () => void }> = ({ onOp
             <h1 className="text-2xl sm:text-3xl font-heading font-black text-white">
               Connectez-vous avec la Communauté <span className="text-amber-400">IA Bénin</span>
             </h1>
-            <p className="text-stone-300 text-xs sm:text-sm mt-1 leading-relaxed">
-              Échangez vos badges par QR code, trouvez des collaborateurs pour vos projets de recherche et découvrez des mentors grâce au Matchmaker IA.
-            </p>
           </div>
 
           <div className="flex flex-wrap gap-2.5">
@@ -339,9 +336,6 @@ export const NetworkingView: React.FC<{ onOpenQRScanner: () => void }> = ({ onOp
             <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center shadow-xs">
               <Users className="w-12 h-12 text-stone-400 mx-auto mb-3" />
               <h4 className="font-bold text-stone-900 text-sm mb-1">Aucun contact pour l'instant</h4>
-              <p className="text-xs text-stone-500 max-w-sm mx-auto mb-4">
-                Scannez le badge QR d'un autre participant ou cliquez sur "Se Connecter" dans l'annuaire pour enregistrer leurs coordonnées.
-              </p>
               <button
                 onClick={() => setActiveTab('directory')}
                 className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-stone-950 font-bold rounded-xl text-xs cursor-pointer shadow-xs"
@@ -403,7 +397,6 @@ export const NetworkingView: React.FC<{ onOpenQRScanner: () => void }> = ({ onOp
             <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-stone-200">
               <Sparkles className="w-8 h-8 text-purple-600 animate-spin mx-auto" />
               <p className="text-sm font-bold text-stone-900">Analyse des profils et calcul des affinités scientifiques en cours...</p>
-              <p className="text-xs text-stone-500">Gemini examine les sujets de recherche, NLP, Computer Vision et MLOps.</p>
             </div>
           ) : aiMatchmaking?.recommendations ? (
             <div className="space-y-4">
@@ -471,9 +464,6 @@ export const NetworkingView: React.FC<{ onOpenQRScanner: () => void }> = ({ onOp
             <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center space-y-4 shadow-xs">
               <Bot className="w-12 h-12 text-purple-600 mx-auto" />
               <h4 className="font-bold text-stone-900 text-base">Prêt pour votre recommandation personnalisée ?</h4>
-              <p className="text-xs text-stone-500 max-w-sm mx-auto">
-                Cliquez ci-dessous pour lancer l'analyse Gemini de vos intérêts et obtenir des suggestions ciblées.
-              </p>
               <button
                 onClick={handleGenerateAIMatchmaking}
                 className="px-6 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 text-white font-bold rounded-xl text-xs shadow-md cursor-pointer"

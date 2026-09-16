@@ -497,7 +497,7 @@ export const ProfileView: React.FC = () => {
 
           {savedSessions.length === 0 ? (
             <p className="text-xs text-stone-500">
-              Aucune session retenue. Ajoutez-les depuis le programme pour les retrouver ici.
+              Aucune session retenue.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -526,9 +526,6 @@ export const ProfileView: React.FC = () => {
         <h2 className="text-sm font-bold text-stone-900 dark:text-stone-100 mb-1">
           Activités ({activities.length})
         </h2>
-        <p className="text-[11px] text-stone-400 mb-4">
-          Émargements, avis, annonces, messages et rencontres, de la plus récente à la plus ancienne.
-        </p>
 
         {activities.length === 0 ? (
           <p className="text-xs text-stone-500">

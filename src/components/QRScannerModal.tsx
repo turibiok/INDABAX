@@ -186,9 +186,6 @@ export const QRScannerModal: React.FC<{
               <h2 className="font-heading font-black text-lg text-stone-900">
                 Scanner & Émargement Express
               </h2>
-              <p className="text-xs text-stone-500">
-                Validation instantanée des présences aux {term.sessions}
-              </p>
             </div>
           </div>
           <button
@@ -267,7 +264,6 @@ export const QRScannerModal: React.FC<{
               <div className="p-4 text-xs text-stone-300">
                 <Camera className="w-8 h-8 mx-auto mb-2 text-stone-500" />
                 <p className="text-amber-300 font-semibold mb-1">{cameraError}</p>
-                <p className="text-stone-400">Utilisez les boutons de test rapide ci-dessous pour valider immédiatement des scans.</p>
               </div>
             )}
           </div>

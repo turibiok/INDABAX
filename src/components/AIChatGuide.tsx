@@ -144,7 +144,6 @@ Je suis là pour vous orienter sur le ${term.schedule}, vous renseigner sur les 
           </div>
           <div>
             <h2 className="font-heading font-black text-xl text-white">Guide IA • {eventConfig.eventName}</h2>
-            <p className="text-xs text-stone-300">Assistant intelligent propulsé par Gemini 2.5</p>
           </div>
         </div>
       </div>

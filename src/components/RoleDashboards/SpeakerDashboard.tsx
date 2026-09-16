@@ -107,9 +107,6 @@ export const SpeakerDashboard: React.FC = () => {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Espace Conférencier : {currentUser.name}</h1>
-          <p className="text-indigo-100 text-sm mt-1 max-w-2xl">
-            Gérez vos interventions, synchronisez votre calendrier Google, déposez vos slides/notebooks et répondez aux questions de l'auditoire.
-          </p>
         </div>
       </div>
 
@@ -227,7 +224,6 @@ export const SpeakerDashboard: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-stone-900 text-sm">Supports de Cours & Slides</h3>
-                <p className="text-xs text-stone-500">Mettez à disposition vos présentations, notebooks et repos.</p>
               </div>
             </div>
 
@@ -328,7 +324,6 @@ export const SpeakerDashboard: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-stone-900 text-sm">Questions & Retours de l'Auditoire</h3>
-                <p className="text-xs text-stone-500">Répondez aux participants ayant assisté à votre session.</p>
               </div>
             </div>
           </div>
@@ -338,7 +333,6 @@ export const SpeakerDashboard: React.FC = () => {
               <div className="text-center py-10 text-stone-400 text-xs">
                 <HelpCircle size={32} className="mx-auto text-stone-300 mb-2" />
                 <p className="font-semibold text-stone-700">Aucune question en attente</p>
-                <p className="text-stone-500 mt-0.5">Les questions posées dans les formulaires d'évaluation apparaîtront ici.</p>
               </div>
             ) : (
               questionsFromAudience.map(item => {

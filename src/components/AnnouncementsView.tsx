@@ -141,9 +141,6 @@ export const AnnouncementsView: React.FC = () => {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Annonces & Notifications</h1>
-          <p className="text-amber-100 text-sm mt-1 max-w-xl">
-            Restez informé en temps réel des changements de salles, navettes, supports de cours, défis du hackathon et alertes urgentes.
-          </p>
         </div>
 
         {canPublish && (
@@ -200,7 +197,6 @@ export const AnnouncementsView: React.FC = () => {
           <div className="text-center py-16 bg-white rounded-2xl border border-stone-200/80 p-8 shadow-xs">
             <Bell size={40} className="mx-auto text-stone-300 mb-3" />
             <h3 className="text-base font-semibold text-stone-800">Aucune annonce dans cette catégorie</h3>
-            <p className="text-sm text-stone-500 mt-1">Sélectionnez une autre {term.track} pour voir les communications de {eventConfig.eventName}.</p>
           </div>
         ) : (
           filteredAnnouncements.map((ann) => {
@@ -401,9 +397,7 @@ export const AnnouncementsView: React.FC = () => {
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        <p className="text-xs text-stone-400 text-center py-2">Soyez le premier à commenter cette annonce.</p>
-                      )}
+                      ) : null}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -430,7 +424,6 @@ export const AnnouncementsView: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-bold text-stone-900 text-base">Nouvelle Annonce Officielle</h3>
-                    <p className="text-xs text-stone-500">Publié sous l'identité de {currentUser.name}</p>
                   </div>
                 </div>
                 <button

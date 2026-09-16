@@ -40,7 +40,7 @@ export const ScheduleView: React.FC<{
     toggleSaveSession,
     checkIns,
     feedbacks,
-    addSessionToCalendar, eventLabel, term } = useEvent();
+    addSessionToCalendar, eventLabel, term, eventConfig } = useEvent();
 
   const [filterMode, setFilterMode] = useState<'all' | 'saved'>('all');
   const [selectedSessionForModal, setSelectedSessionForModal] = useState<Session | null>(null);
@@ -128,18 +128,22 @@ export const ScheduleView: React.FC<{
             <Sparkles className="w-3.5 h-3.5" />
             {capitaliser(term.schedule)} officiel • {eventLabel}
           </div>
-          <h1 className="text-2xl sm:text-4xl font-heading font-black text-white tracking-tight leading-tight mb-2">
-            Renforcer la Recherche en IA & Deep Learning au <span className="bg-gradient-to-r from-amber-400 via-orange-300 to-emerald-300 bg-clip-text text-transparent">Bénin</span>
-          </h1>
-          <p className="text-emerald-50 text-sm sm:text-base leading-relaxed">
-            Consultez le programme des 3 jours, réservez vos ateliers, émergez instantanément par scan QR et transmettez vos avis synchronisés sur Google Sheets.
-          </p>
+            {/*
+              * Le propos de l'événement, tel qu'il est écrit dans sa
+              * configuration. Rien n'est affiché s'il n'en déclare aucun :
+              * inventer un slogan à sa place serait pire que le silence.
+              */}
+            {eventConfig.themeDescription && (
+              <h1 className="text-2xl sm:text-4xl font-heading font-black text-white tracking-tight leading-tight mb-2">
+                {eventConfig.themeDescription}
+              </h1>
+            )}
 
           {/* Quick Metrics Bar */}
           <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-6 pt-6 border-t border-emerald-700/60">
             <div>
               <p className="text-xl sm:text-2xl font-black text-white font-heading">{sessions.length}</p>
-              <p className="text-xs text-emerald-200">Sessions & Ateliers</p>
+              <p className="text-xs text-emerald-200">{capitaliser(term.sessions)}</p>
             </div>
             <div>
               <p className="text-xl sm:text-2xl font-black text-amber-300 font-heading">3 Jours</p>

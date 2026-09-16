@@ -476,9 +476,6 @@ export const SuperAdminSettings: React.FC = () => {
                     <h3 className="font-extrabold text-base sm:text-lg text-stone-900 dark:text-stone-100">
                       Identité & Coordonnées de l'Événement
                     </h3>
-                    <p className="text-xs text-stone-500 dark:text-stone-400">
-                      Informations officielles publiées sur les badges, exports et dans l'interface.
-                    </p>
                   </div>
                 </div>
 
@@ -607,9 +604,6 @@ export const SuperAdminSettings: React.FC = () => {
                     <h3 className="font-extrabold text-base sm:text-lg text-stone-900 dark:text-stone-100">
                       Salles, Amphithéâtres & Capacités d'Accueil
                     </h3>
-                    <p className="text-xs text-stone-500 dark:text-stone-400">
-                      Définit les jauges maximales pour le calcul automatique des taux de remplissage.
-                    </p>
                   </div>
                 </div>
 
@@ -696,7 +690,6 @@ export const SuperAdminSettings: React.FC = () => {
                 <div className="p-4 bg-stone-50 dark:bg-stone-800/60 rounded-2xl flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs font-bold text-stone-900 dark:text-stone-100">Inscriptions Express sur Site</h4>
-                    <p className="text-[11px] text-stone-500 dark:text-stone-400">Autoriser l'émargement automatique de nouveaux emails scannés.</p>
                   </div>
                   <input
                     type="checkbox"
@@ -709,7 +702,6 @@ export const SuperAdminSettings: React.FC = () => {
                 <div className="p-4 bg-stone-50 dark:bg-stone-800/60 rounded-2xl flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs font-bold text-stone-900 dark:text-stone-100">Alertes Push 15 min</h4>
-                    <p className="text-[11px] text-stone-500 dark:text-stone-400">Déclencher les notifications avant chaque session de l'agenda.</p>
                   </div>
                   <input
                     type="checkbox"
@@ -722,7 +714,6 @@ export const SuperAdminSettings: React.FC = () => {
                 <div className="p-4 bg-stone-50 dark:bg-stone-800/60 rounded-2xl flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs font-bold text-stone-900 dark:text-stone-100">Feedbacks Anonymes</h4>
-                    <p className="text-[11px] text-stone-500 dark:text-stone-400">Permettre aux auditeurs d'évaluer les sessions sans afficher leur nom.</p>
                   </div>
                   <input
                     type="checkbox"
@@ -735,7 +726,6 @@ export const SuperAdminSettings: React.FC = () => {
                 <div className="p-4 bg-stone-50 dark:bg-stone-800/60 rounded-2xl flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs font-bold text-stone-900 dark:text-stone-100">Mode Maintenance</h4>
-                    <p className="text-[11px] text-stone-500 dark:text-stone-400">Afficher une bannière d'information lors des mises à jour majeures.</p>
                   </div>
                   <input
                     type="checkbox"
@@ -1110,9 +1100,6 @@ export const SuperAdminSettings: React.FC = () => {
                   <h3 className="font-extrabold text-base sm:text-lg text-stone-900 dark:text-stone-100">
                     Communiqués & Annonces Officielles ({announcements.length})
                   </h3>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">
-                    Diffusez des alertes en direct, épinglez les messages urgents et modifiez les communiqués.
-                  </p>
                 </div>
               </div>
 
@@ -1217,9 +1204,6 @@ export const SuperAdminSettings: React.FC = () => {
                   <h3 className="font-extrabold text-base sm:text-lg text-stone-900 dark:text-stone-100">
                     Salons de Discussion Communautaires ({channels.length})
                   </h3>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">
-                    Créez des salons thématiques pour les échanges entre conférenciers, auditeurs et équipes.
-                  </p>
                 </div>
               </div>
 
@@ -1283,9 +1267,6 @@ export const SuperAdminSettings: React.FC = () => {
                 <h3 className="font-extrabold text-base sm:text-lg text-stone-900 dark:text-stone-100">
                   Centre d'Exportation & Téléchargements
                 </h3>
-                <p className="text-xs text-stone-500 dark:text-stone-400">
-                  Exportez l'ensemble des données dans des formats standards (JSON complet pour sauvegarde, CSV pour tableurs).
-                </p>
               </div>
             </div>
 
@@ -1296,9 +1277,6 @@ export const SuperAdminSettings: React.FC = () => {
                   <span className="font-bold text-xs text-amber-900 dark:text-amber-300">Sauvegarde JSON Intégrale</span>
                   <span className="px-2 py-0.5 bg-amber-400 text-stone-950 rounded text-[9px] font-black uppercase">Recommandé</span>
                 </div>
-                <p className="text-[11px] text-stone-600 dark:text-stone-400">
-                  Exporte toutes les tables (sessions, participants, checkins, feedbacks, annonces, logs, config).
-                </p>
                 <button
                   onClick={exportFullDatabaseJson}
                   className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
@@ -1311,9 +1289,6 @@ export const SuperAdminSettings: React.FC = () => {
               {/* CSV Bundle */}
               <div className="p-4 bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 rounded-2xl space-y-2.5">
                 <span className="font-bold text-xs text-stone-900 dark:text-stone-100 block">Pack CSV Global</span>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                  Déclenche le téléchargement automatique de tous les fichiers CSV (Présences, Feedbacks, Sessions, etc.).
-                </p>
                 <button
                   onClick={exportAllCsvBundle}
                   className="w-full py-2 bg-stone-800 dark:bg-stone-700 hover:bg-stone-900 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
@@ -1326,9 +1301,6 @@ export const SuperAdminSettings: React.FC = () => {
               {/* Check-ins CSV */}
               <div className="p-4 bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 rounded-2xl space-y-2.5">
                 <span className="font-bold text-xs text-stone-900 dark:text-stone-100 block">Émargements / Présences ({checkIns.length})</span>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                  Historique complet des scans QR, dates précises, opérateurs et sessions associées.
-                </p>
                 <button
                   onClick={() => exportToCsv('checkins')}
                   className="w-full py-2 bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 text-stone-800 dark:text-stone-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
@@ -1341,9 +1313,6 @@ export const SuperAdminSettings: React.FC = () => {
               {/* Feedbacks CSV */}
               <div className="p-4 bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 rounded-2xl space-y-2.5">
                 <span className="font-bold text-xs text-stone-900 dark:text-stone-100 block">Évaluations & Notes ({feedbacks.length})</span>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                  Notes détaillées de 1 à 5, clarté des intervenants, retours qualitatifs et questions orateurs.
-                </p>
                 <button
                   onClick={() => exportToCsv('feedbacks')}
                   className="w-full py-2 bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 text-stone-800 dark:text-stone-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
@@ -1356,9 +1325,6 @@ export const SuperAdminSettings: React.FC = () => {
               {/* Participants CSV */}
               <div className="p-4 bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 rounded-2xl space-y-2.5">
                 <span className="font-bold text-xs text-stone-900 dark:text-stone-100 block">Participants ({participants.length})</span>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                  Listing des inscrits avec billets, institutions, rôles et centres d'intérêts.
-                </p>
                 <button
                   onClick={() => exportToCsv('participants')}
                   className="w-full py-2 bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 text-stone-800 dark:text-stone-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
@@ -1371,9 +1337,6 @@ export const SuperAdminSettings: React.FC = () => {
               {/* Sessions CSV */}
               <div className="p-4 bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 rounded-2xl space-y-2.5">
                 <span className="font-bold text-xs text-stone-900 dark:text-stone-100 block">Programme & Sessions ({sessions.length})</span>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                  Horaires, intervenants, salles, tracks, types et jauges de participation.
-                </p>
                 <button
                   onClick={() => exportToCsv('sessions')}
                   className="w-full py-2 bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 text-stone-800 dark:text-stone-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
@@ -1395,9 +1358,6 @@ export const SuperAdminSettings: React.FC = () => {
                 <h3 className="font-extrabold text-base sm:text-lg text-stone-900 dark:text-stone-100">
                   Restauration de Sauvegarde JSON
                 </h3>
-                <p className="text-xs text-stone-500 dark:text-stone-400">
-                  Chargez un fichier de sauvegarde pour restaurer l'état exact de l'événement.
-                </p>
               </div>
             </div>
 
@@ -1530,9 +1490,6 @@ export const SuperAdminSettings: React.FC = () => {
                   <h3 className="font-extrabold text-base sm:text-lg text-stone-900 dark:text-stone-100">
                     Base de données Google Sheet (AppSheet)
                   </h3>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">
-                    Comptes, rôles, présences et retours dans un classeur partagé par lien. Ni Google Cloud, ni Firebase.
-                  </p>
                 </div>
               </div>
 
