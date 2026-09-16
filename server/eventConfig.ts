@@ -53,6 +53,16 @@ export interface EventIdentity {
    * Laisse vide, il est fabrique a partir du nom de l'evenement.
    */
   ticketPrefix: string;
+  /**
+   * Adresse d'expedition des emails de l'application.
+   *
+   * Vide, les mails partent du compte Google proprietaire du Apps Script.
+   * Renseignee, cette adresse doit etre verifiee sur ce meme compte — soit
+   * qu'elle lui appartienne, soit qu'elle y figure comme alias d'envoi.
+   */
+  senderEmail: string;
+  /** Nom affiche a cote de l'adresse d'expedition. Vide : le nom de l'evenement. */
+  senderName: string;
 }
 
 /**
@@ -112,6 +122,8 @@ const IDENTITE_PAR_DEFAUT: EventIdentity = {
   twitterHandle: '',
   linkedinUrl: '',
   ticketPrefix: '',
+  senderEmail: '',
+  senderName: '',
 };
 
 const REGLAGES_PAR_DEFAUT: EventSettings = {
@@ -350,6 +362,8 @@ const CLES_IDENTITE: (keyof EventIdentity)[] = [
   'twitterHandle',
   'linkedinUrl',
   'ticketPrefix',
+  'senderEmail',
+  'senderName',
 ];
 
 const CLES_APPARENCE: (keyof EventBranding)[] = [

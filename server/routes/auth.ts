@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AccountStatus, ParticipantRole, UserAccount } from '../../src/types';
 import { mapUserAccounts, normalizeEmail } from '../../src/lib/sheets';
 import { capabilitiesFor } from '../../src/permissions';
+import { getEventConfig } from '../eventConfig';
 import {
   findAccount,
   getAccounts,
@@ -516,17 +517,37 @@ authRouter.post('/forgot', async (req: AuthedRequest, res) => {
   const link = `${publicBaseUrl(req)}/?reset=${encodeURIComponent(token)}`;
 
   try {
-    await sendEmail({
-      to: email,
-      subject: 'IndabaX Bénin 2026 — réinitialisation de votre mot de passe',
-      body:
-        `Bonjour ${account.name},\n\n` +
-        `Vous avez demandé à réinitialiser votre mot de passe pour l'application IndabaX Bénin 2026.\n\n` +
-        `Ouvrez ce lien pour en choisir un nouveau :\n${link}\n\n` +
-        `Ce lien est valable jusqu'à ${expiresAt.toLocaleString('fr-FR')} et ne fonctionne qu'une fois.\n\n` +
-        `Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe reste inchangé.\n\n` +
-        `— L'équipe IndabaX Bénin\n`,
-    });
+      // Le message nomme l'événement configuré : cet email part aussi bien
+      // d'un colloque que d'un stage, et signer « IndabaX Bénin » chez
+      // quelqu'un d'autre passerait pour une tentative d'hameçonnage.
+      const evenement = getEventConfig().identity;
+      const nomEvenement = [evenement.eventName, evenement.edition].filter(Boolean).join(' ');
+
+      await sendEmail({
+        to: email,
+        from: evenement.senderEmail,
+        fromName: evenement.senderName || nomEvenement,
+        subject: `${nomEvenement} — réinitialisation de votre mot de passe`,
+        body:
+          `Bonjour ${account.name},
+
+` +
+          `Vous avez demandé à réinitialiser votre mot de passe pour l'application ${nomEvenement}.
+
+` +
+          `Ouvrez ce lien pour en choisir un nouveau :
+${link}
+
+` +
+          `Ce lien est valable jusqu'à ${expiresAt.toLocaleString('fr-FR')} et ne fonctionne qu'une fois.
+
+` +
+          `Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe reste inchangé.
+
+` +
+          `— L'équipe ${evenement.eventName}
+`,
+      });
   } catch (error: any) {
     // L'envoi a echoue : le jeton ne sert a rien, autant le retirer.
     revokeTokensFor(email);

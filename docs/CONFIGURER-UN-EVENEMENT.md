@@ -55,6 +55,8 @@ de s'en servir comme pense-bête.
 | `twitterHandle` | `@exemple` |
 | `linkedinUrl` | `https://linkedin.com/company/exemple` |
 | `ticketPrefix` | `RLL-2027` |
+| `senderEmail` | `event@exemple.org` |
+| `senderName` | `Rencontres du Logiciel Libre` |
 
 Les dates s'écrivent `AAAA-MM-JJ`. L'application les met en forme elle-même :
 `2027-03-12` et `2027-03-14` s'affichent « 12 – 14 mars 2027 ».
@@ -63,6 +65,44 @@ Les dates s'écrivent `AAAA-MM-JJ`. L'application les met en forme elle-même :
 du nom : « Rencontres du Logiciel Libre » 2027 donnerait `RDLL-2027`. Renseignez-le
 si vos billets ont déjà été distribués sous un autre préfixe — sans quoi deux
 personnes du même événement auraient des billets de formes différentes.
+
+### Envoi des emails
+
+L'application écrit à ses participants pour une seule chose : les liens de
+réinitialisation de mot de passe. Ces messages partent par le Apps Script, donc
+depuis un compte Google — aucun service tiers, aucune clé supplémentaire.
+
+| Clé | Ce qu'elle fait |
+| --- | --- |
+| `senderEmail` | Adresse d'expédition. Vide : le compte propriétaire du script |
+| `senderName` | Nom affiché à côté. Vide : le nom de l'événement |
+
+**Une adresse ne s'emprunte pas librement.** Google n'autorise `senderEmail`
+que si elle est vérifiée sur le compte qui exécute le script : soit parce que
+c'est ce compte, soit parce qu'elle y figure comme alias d'envoi (Gmail →
+Paramètres → Comptes → « Envoyer des emails en tant que »).
+
+Pour savoir où vous en êtes, l'espace Super-Admin interroge le script :
+
+```
+GET /api/event/mailer
+```
+
+Il répond quel compte exécute le script, quelles adresses il peut emprunter,
+combien d'envois lui restent aujourd'hui, et si l'adresse configurée convient.
+Un envoi d'essai est disponible à côté :
+
+```
+POST /api/event/mailer/test   { "to": "vous@exemple.org" }
+```
+
+Mieux vaut un essai explicite que de déclencher une réinitialisation sur un
+vrai compte pour voir si ça marche.
+
+> Si l'adresse configurée n'est pas autorisée, l'envoi échoue avec un message
+> qui nomme le compte et liste les adresses utilisables — plutôt que de partir
+> en silence depuis une autre adresse, ce qui vous ferait croire la
+> configuration prise en compte.
 
 ### Apparence
 

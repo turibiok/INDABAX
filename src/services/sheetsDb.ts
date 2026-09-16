@@ -241,15 +241,74 @@ function findSheet(spreadsheet, wanted) {
 function doPost(e) {
   var payload = JSON.parse(e.postData.contents);
 
+  /**
+   * Renseignements sur la messagerie.
+   *
+   * Dit depuis quelle adresse ce script peut ecrire, et lesquelles il a le
+   * droit d'emprunter. Sans cela, configurer un expediteur revient a deviner :
+   * Google n'autorise une adresse que si elle est verifiee sur ce compte.
+   */
+  if (payload.action === 'mailer-info') {
+    var alias = [];
+    try { alias = GmailApp.getAliases(); } catch (err) {}
+
+    var quota = -1;
+    try { quota = MailApp.getRemainingDailyQuota(); } catch (err) {}
+
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        ok: true,
+        owner: Session.getEffectiveUser().getEmail(),
+        aliases: alias,
+        remainingQuota: quota
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // Envoi d'email : sert aux liens de réinitialisation de mot de passe.
   // Le mail part de votre compte Google, sans service tiers.
   if (payload.action === 'email') {
     try {
-      MailApp.sendEmail({
-        to: payload.to,
-        subject: payload.subject,
-        body: payload.body
-      });
+      var expediteur = String(payload.from || '').trim();
+      var nom = String(payload.fromName || '').trim();
+
+      if (expediteur) {
+        /*
+         * Emprunter une adresse demande qu'elle soit verifiee sur ce compte.
+         * On le verifie ici plutot que de laisser Google renvoyer un mail parti
+         * d'une autre adresse : l'organisateur croirait sa configuration prise
+         * en compte alors qu'elle serait ignoree.
+         */
+        var proprietaire = Session.getEffectiveUser().getEmail();
+        var alias = [];
+        try { alias = GmailApp.getAliases(); } catch (err) {}
+
+        var permise = expediteur === proprietaire;
+        for (var i = 0; i < alias.length; i++) {
+          if (String(alias[i]).toLowerCase() === expediteur.toLowerCase()) permise = true;
+        }
+
+        if (!permise) {
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              ok: false,
+              badSender: true,
+              owner: proprietaire,
+              aliases: alias,
+              error: "L'adresse " + expediteur + " n'est pas verifiee sur le compte " + proprietaire
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+
+        var options = { from: expediteur };
+        if (nom) options.name = nom;
+        GmailApp.sendEmail(payload.to, payload.subject, payload.body, options);
+      } else {
+        var base = { to: payload.to, subject: payload.subject, body: payload.body };
+        if (nom) base.name = nom;
+        MailApp.sendEmail(base);
+      }
+
       return ContentService
         .createTextOutput(JSON.stringify({ ok: true, sent: true }))
         .setMimeType(ContentService.MimeType.JSON);

@@ -7,7 +7,7 @@ import {
   saveRoles,
 } from '../eventConfig';
 import { AuthedRequest, requireCapability } from '../sessions';
-import { SheetError } from '../sheetsGateway';
+import { mailerInfo, sendEmail, SheetError } from '../sheetsGateway';
 import { EventRole } from '../../src/types';
 
 /**
@@ -126,3 +126,88 @@ eventRouter.put('/roles', requireCapability('canManageRoles'), async (req: Authe
     repondreErreur(res, error);
   }
 });
+
+/**
+ * Etat de la messagerie : depuis quelle adresse le service ecrit, lesquelles il
+ * peut emprunter, et si celle qui est configuree convient.
+ *
+ * Reservee a qui gere le classeur : elle revele l'adresse du compte Google qui
+ * execute le script.
+ */
+eventRouter.get(
+  '/mailer',
+  requireCapability('canManageIntegrations'),
+  async (_req: AuthedRequest, res) => {
+    const voulue = getEventConfig().identity.senderEmail.trim();
+
+    try {
+      const info = await mailerInfo();
+      const utilisables = [info.owner, ...info.aliases].filter(Boolean);
+      const convient =
+        !voulue || utilisables.some(a => a.toLowerCase() === voulue.toLowerCase());
+
+      res.json({
+        configured: true,
+        owner: info.owner,
+        aliases: info.aliases,
+        remainingQuota: info.remainingQuota,
+        senderEmail: voulue,
+        senderOk: convient,
+        message: !voulue
+          ? `Les emails partent de ${info.owner}.`
+          : convient
+            ? `Les emails partent bien de ${voulue}.`
+            : `${voulue} n'est pas autorisée sur le compte ${info.owner}. ` +
+              `Adresses utilisables : ${utilisables.join(', ')}.`,
+      });
+    } catch (error) {
+      repondreErreur(res, error);
+    }
+  },
+);
+
+/**
+ * Envoie un email d'essai a l'adresse demandee.
+ *
+ * Verifier autrement supposerait de declencher une reinitialisation de mot de
+ * passe sur un vrai compte : mieux vaut un essai explicite.
+ */
+eventRouter.post(
+  '/mailer/test',
+  requireCapability('canManageIntegrations'),
+  async (req: AuthedRequest, res) => {
+    const destinataire = String((req.body || {}).to || '').trim();
+
+    if (!destinataire || !destinataire.includes('@')) {
+      return res.status(400).json({ error: 'Adresse de destination manquante.', reason: 'bad_input' });
+    }
+
+    const evenement = getEventConfig().identity;
+    const nom = [evenement.eventName, evenement.edition].filter(Boolean).join(' ');
+
+    try {
+      await sendEmail({
+        to: destinataire,
+        from: evenement.senderEmail,
+        fromName: evenement.senderName || nom,
+        subject: `${nom} — essai d'envoi`,
+        body:
+          `Cet email confirme que ${nom} sait écrire à ses participants.
+
+` +
+          `Expéditeur configuré : ${evenement.senderEmail || '(compte du Apps Script)'}
+` +
+          `Demandé par : ${req.session?.email || 'inconnu'}
+
+` +
+          `Si vous recevez ce message, les liens de réinitialisation de mot de passe ` +
+          `arriveront eux aussi.
+`,
+      });
+
+      res.json({ ok: true, message: `Email d'essai envoyé à ${destinataire}.` });
+    } catch (error) {
+      repondreErreur(res, error);
+    }
+  },
+);

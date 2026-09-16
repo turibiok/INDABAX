@@ -273,10 +273,99 @@ export function isMailerConfigured(): boolean {
   return getSheetsConfig().writeWebhookUrl.trim().length > 0;
 }
 
+/**
+ * Renseignements sur la messagerie du Apps Script.
+ *
+ * Dit depuis quelle adresse le script ecrit, et lesquelles il peut emprunter.
+ * Sans cela, configurer un expediteur revient a essayer au hasard : Google
+ * n'autorise une adresse que si elle est verifiee sur ce compte, et rien dans
+ * l'application ne permettait de savoir lesquelles le sont.
+ */
+export async function mailerInfo(): Promise<{
+  owner: string;
+  aliases: string[];
+  remainingQuota: number;
+}> {
+  const webhookUrl = getSheetsConfig().writeWebhookUrl.trim();
+
+  if (!webhookUrl) {
+    throw new SheetError(
+      "Aucun Apps Script n'est configuré : l'application ne peut pas envoyer d'email.",
+      409,
+      'no_mailer',
+    );
+  }
+
+  if (!isAllowedGoogleUrl(webhookUrl)) {
+    throw new SheetError("L'URL du Apps Script enregistrée est invalide.", 400, 'bad_webhook');
+  }
+
+  const response = await fetchWithTimeout(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'mailer-info' }),
+  });
+
+  const body = await response.text();
+  const head = body.trimStart().slice(0, 200).toLowerCase();
+
+  /*
+   * Une version anterieure du script ignore cette action, tombe dans la
+   * branche d'ecriture sans nom de table, et leve : Google renvoie alors sa
+   * page d'erreur en HTML. C'est le cas le plus frequent, et « reponse
+   * illisible » laisserait chercher ailleurs.
+   */
+  if (head.startsWith('<!doctype html') || head.startsWith('<html')) {
+    throw new SheetError(
+      "Le Apps Script déployé ne sait pas renseigner sa messagerie : recollez la version fournie " +
+        "par l'application, puis redéployez-la.",
+      409,
+      'mailer_outdated',
+    );
+  }
+
+  let parsed: { ok?: boolean; owner?: string; aliases?: string[]; remainingQuota?: number } | null =
+    null;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new SheetError(
+      `Réponse illisible du Apps Script : ${body.slice(0, 200)}`,
+      502,
+      'mailer_bad_response',
+    );
+  }
+
+  // Une version anterieure du script ignore cette action et retombe sur
+  // l'ecriture de lignes : elle repond alors sans « owner ».
+  if (parsed?.ok !== true || typeof parsed.owner !== 'string') {
+    throw new SheetError(
+      "Le Apps Script déployé ne sait pas renseigner sa messagerie : recollez la version fournie " +
+        "par l'application, puis redéployez-la.",
+      409,
+      'mailer_outdated',
+    );
+  }
+
+  return {
+    owner: parsed.owner,
+    aliases: Array.isArray(parsed.aliases) ? parsed.aliases.filter(Boolean) : [],
+    remainingQuota: typeof parsed.remainingQuota === 'number' ? parsed.remainingQuota : -1,
+  };
+}
+
 export async function sendEmail(input: {
   to: string;
   subject: string;
   body: string;
+  /**
+   * Adresse d'expedition souhaitee.
+   *
+   * Passee en parametre plutot que lue ici : ce module est celui que la
+   * configuration d'evenement importe, et l'inverse formerait un cycle.
+   */
+  from?: string;
+  fromName?: string;
 }): Promise<{ sent: true }> {
   const webhookUrl = getSheetsConfig().writeWebhookUrl.trim();
 
@@ -295,7 +384,14 @@ export async function sendEmail(input: {
   const response = await fetchWithTimeout(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'email', to: input.to, subject: input.subject, body: input.body }),
+    body: JSON.stringify({
+      action: 'email',
+      to: input.to,
+      subject: input.subject,
+      body: input.body,
+      from: (input.from || '').trim(),
+      fromName: (input.fromName || '').trim(),
+    }),
   });
 
   const body = await response.text();
@@ -310,7 +406,14 @@ export async function sendEmail(input: {
     );
   }
 
-  let parsed: { ok?: boolean; error?: string; unsupported?: boolean } | null = null;
+  let parsed: {
+    ok?: boolean;
+    error?: string;
+    unsupported?: boolean;
+    badSender?: boolean;
+    owner?: string;
+    aliases?: string[];
+  } | null = null;
   try {
     parsed = JSON.parse(body);
   } catch {
@@ -328,6 +431,27 @@ export async function sendEmail(input: {
         "l'application, puis redéployez-la.",
       409,
       'mailer_outdated',
+    );
+  }
+
+  /*
+   * Adresse d'expedition refusee : c'est le cas le plus probable, et le plus
+   * facile a corriger — mais seulement si on dit quoi corriger. Un « echec
+   * d'envoi » laisserait chercher du cote du reseau ou des quotas.
+   */
+  if (parsed?.badSender) {
+    const connues = (parsed.aliases || []).filter(Boolean);
+
+    throw new SheetError(
+      `L'adresse d'expédition configurée n'est pas autorisée sur le compte Google ` +
+        `qui exécute le Apps Script (${parsed.owner || 'compte inconnu'}). ` +
+        (connues.length > 0
+          ? `Adresses utilisables : ${[parsed.owner, ...connues].filter(Boolean).join(', ')}. `
+          : `Ce compte n'a aucun alias d'envoi déclaré. `) +
+        `Ajoutez-la dans Gmail → Paramètres → Comptes → « Envoyer des emails en tant que », ` +
+        `ou laissez « senderEmail » vide pour écrire depuis le compte lui-même.`,
+      409,
+      'mailer_bad_sender',
     );
   }
 

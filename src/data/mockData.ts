@@ -635,6 +635,8 @@ export const INITIAL_EVENT_CONFIG: EventConfig = {
   twitterHandle: "@IndabaXBenin",
   linkedinUrl: "https://linkedin.com/company/indabax-benin",
     ticketPrefix: "INDABAX-BJ-2026",
+    senderEmail: "",
+    senderName: "",
   rooms: [
     { id: "room-1", name: "Amphithéâtre Houdégbé (UAC)", capacity: 350, locationNotes: "Bâtiment Central UAC - Accès PMR", hasStream: true },
     { id: "room-2", name: "Lab IA - Salle Turing", capacity: 65, locationNotes: "Institut de Mathématiques et de Sciences Physiques (IMSP)", hasStream: false },

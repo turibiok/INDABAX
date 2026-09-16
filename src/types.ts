@@ -430,6 +430,10 @@ export interface EventConfig {
   linkedinUrl: string;
   /** Préfixe des numéros de billet. Vide : fabriqué depuis le nom. */
   ticketPrefix: string;
+  /** Adresse d'expédition des emails. Vide : le compte propriétaire du script. */
+  senderEmail: string;
+  /** Nom affiché à côté de l'adresse. Vide : le nom de l'événement. */
+  senderName: string;
   rooms: RoomConfig[];
   tracks: string[];
   allowExpressRegistration: boolean;

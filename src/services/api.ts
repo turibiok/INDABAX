@@ -251,6 +251,8 @@ export interface RemoteEventConfig {
     twitterHandle: string;
     linkedinUrl: string;
     ticketPrefix: string;
+    senderEmail: string;
+    senderName: string;
   };
   settings: {
     allowExpressRegistration: boolean;
