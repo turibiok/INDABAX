@@ -1,22 +1,15 @@
 # Description de l'infrastructure Tech Event.
 #
-# Elle existe pour une raison précise : relier la base au service sans que
-# personne n'ait à recopier le mot de passe de connexion. Render substitue
-# lui-même la valeur de `fromDatabase`, qui n'apparaît donc ni dans ce dépôt,
-# ni dans un presse-papier, ni dans un historique de conversation.
+# La base vit chez Neon, et non chez Render : son offre gratuite n'expire pas,
+# là où celle de Render s'efface au bout de trente jours avec ce qu'elle
+# contient. Elle n'est donc pas déclarée ici — seule son adresse est attendue.
+#
+# Aucun secret dans ce fichier. Tout ce qui en est un porte `sync: false` et se
+# renseigne dans le tableau de bord, une valeur du dépôt ne pouvant pas être
+# tenue à l'abri.
 #
 # Pour l'appliquer : Render → Blueprints → New Blueprint Instance, en pointant
 # ce dépôt. Les ressources existantes sont reprises, pas recréées.
-
-databases:
-  - name: tech-event-db
-    databaseName: techevent
-    user: techevent
-    plan: free
-    region: frankfurt
-    # L'offre gratuite expire trente jours après sa création et la base est
-    # alors supprimée. Passer à une offre payante avant l'échéance est la
-    # seule façon de conserver les données.
 
 services:
   - type: web
@@ -29,12 +22,13 @@ services:
     healthCheckPath: /api/health
 
     envVars:
-      # Le lien vers la base. Render remplace cette déclaration par la chaîne
-      # de connexion interne, et la met à jour d'elle-même si elle change.
+      # L'adresse de la base Neon. Prenez celle dite « pooled » — son hôte
+      # contient « -pooler » — et gardez « ?sslmode=require » : l'autre ouvre
+      # une connexion par requête et s'épuise dès que plusieurs personnes
+      # arrivent en même temps. Le serveur le signale au démarrage s'il
+      # reconnaît la mauvaise.
       - key: DATABASE_URL
-        fromDatabase:
-          name: tech-event-db
-          property: connectionString
+        sync: false
 
       - key: NODE_ENV
         value: production
