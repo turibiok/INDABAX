@@ -7,6 +7,8 @@ import { sheetsRouter } from "./server/routes/sheets";
 import { aiRouter } from "./server/routes/ai";
 import { socialRouter } from "./server/routes/social";
 import { eventRouter } from "./server/routes/event";
+import { platformRouter } from "./server/routes/platform";
+import { chargerRegistre, registreConfigure } from "./server/platform";
 import { reloadEventConfig } from "./server/eventConfig";
 import { warmSocialCache } from "./server/social";
 import {
@@ -49,6 +51,7 @@ app.use("/api/sheets", sheetsRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/social", socialRouter);
 app.use("/api/event", eventRouter);
+app.use("/api/platform", platformRouter);
 
 async function startServer() {
   await initStore();
@@ -140,6 +143,21 @@ async function startServer() {
     console.warn(
       `Configuration de l'événement illisible, valeurs livrées appliquées : ` +
         `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  // Le registre de la plateforme : la liste des événements et les comptes qui
+  // les portent. Sans lui, l'application se comporte comme avant — un seul
+  // événement, celui que SHEET_URL désigne.
+  if (registreConfigure()) {
+    const registre = await chargerRegistre();
+    console.log(
+      `Plateforme Tech Event : ${registre.events} événement(s), ${registre.accounts} compte(s).`,
+    );
+    for (const erreur of registre.erreurs) console.warn(`  ${erreur}`);
+  } else {
+    console.log(
+      "Registre de plateforme non configuré (PLATFORM_SHEET_URL) : mode événement unique.",
     );
   }
 

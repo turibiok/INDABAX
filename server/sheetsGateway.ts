@@ -496,6 +496,14 @@ export function scriptIsOutdated(reply: ScriptWriteReply, keyColumn?: string): b
 
 export interface WriteOptions {
   /**
+   * Classeur destinataire, quand ce n'est pas celui de l'evenement courant.
+   *
+   * La plateforme tient son registre dans un classeur a part : sans ce
+   * parametre, y ecrire enverrait les lignes dans le classeur d'un evenement,
+   * au hasard de celui qui se trouve charge.
+   */
+  config?: ServerSheetsConfig;
+  /**
    * Colonne servant de cle. Quand elle est fournie, une ligne dont la cle
    * existe deja est mise a jour au lieu d'etre ajoutee : c'est ce qui permet
    * de tenir une seule ligne par personne dans l'onglet des profils.
@@ -512,7 +520,7 @@ export async function writeRows(
   rows: Record<string, unknown>[],
   options: WriteOptions = {},
 ): Promise<{ via: 'apps-script' | 'appsheet'; written: number }> {
-  const config = getSheetsConfig();
+  const config = options.config || getSheetsConfig();
 
   if (rows.length === 0) {
     throw new SheetError('Aucune ligne à écrire.', 400, 'empty');
