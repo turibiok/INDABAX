@@ -1,0 +1,73 @@
+# Description de l'infrastructure Tech Event.
+#
+# Elle existe pour une raison précise : relier la base au service sans que
+# personne n'ait à recopier le mot de passe de connexion. Render substitue
+# lui-même la valeur de `fromDatabase`, qui n'apparaît donc ni dans ce dépôt,
+# ni dans un presse-papier, ni dans un historique de conversation.
+#
+# Pour l'appliquer : Render → Blueprints → New Blueprint Instance, en pointant
+# ce dépôt. Les ressources existantes sont reprises, pas recréées.
+
+databases:
+  - name: tech-event-db
+    databaseName: techevent
+    user: techevent
+    plan: free
+    region: frankfurt
+    # L'offre gratuite expire trente jours après sa création et la base est
+    # alors supprimée. Passer à une offre payante avant l'échéance est la
+    # seule façon de conserver les données.
+
+services:
+  - type: web
+    name: indabax-benin
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+
+    envVars:
+      # Le lien vers la base. Render remplace cette déclaration par la chaîne
+      # de connexion interne, et la met à jour d'elle-même si elle change.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tech-event-db
+          property: connectionString
+
+      - key: NODE_ENV
+        value: production
+
+      # Renseignées dans le tableau de bord : elles portent des secrets, qui
+      # n'ont pas leur place dans un dépôt.
+      - key: SHEET_URL
+        sync: false
+      - key: APPS_SCRIPT_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # Compte d'administration de la plateforme, créé au premier démarrage
+      # s'il n'existe pas. Le mot de passe ne sert qu'à cette création : le
+      # changer ensuite n'a aucun effet, un amorçage n'étant pas une
+      # réinitialisation.
+      - key: PLATFORM_ADMIN_EMAIL
+        sync: false
+      - key: PLATFORM_ADMIN_PASSWORD
+        sync: false
+      - key: PLATFORM_ADMIN_NAME
+        sync: false
+
+      # Reprise de l'événement déjà en service : sans ces valeurs, il resterait
+      # absent du registre de la plateforme.
+      - key: EVENT_NAME
+        sync: false
+      - key: EVENT_EDITION
+        sync: false
+      - key: EVENT_START_DATE
+        sync: false
+      - key: EVENT_END_DATE
+        sync: false
+      - key: EVENT_LOCATION
+        sync: false

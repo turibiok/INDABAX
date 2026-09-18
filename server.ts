@@ -9,6 +9,7 @@ import { socialRouter } from "./server/routes/social";
 import { eventRouter } from "./server/routes/event";
 import { platformRouter } from "./server/routes/platform";
 import { chargerRegistre, registreConfigure } from "./server/platform";
+import { amorcerPlateforme } from "./server/bootstrap";
 import { reloadEventConfig } from "./server/eventConfig";
 import { warmSocialCache } from "./server/social";
 import {
@@ -145,6 +146,21 @@ async function startServer() {
         `${error instanceof Error ? error.message : String(error)}`,
     );
   }
+
+  // La base, si elle est configurée : tables créées, compte d'administration
+  // et reprise de l'événement décrit par l'environnement. Rien ici ne lève —
+  // une base injoignable laisse l'application démarrer en mode événement
+  // unique plutôt que d'empêcher tout le monde d'entrer.
+  const amorcage = await amorcerPlateforme();
+
+  console.log(
+    amorcage.pret
+      ? 'Base PostgreSQL prête.'
+      : 'Base PostgreSQL absente ou injoignable.',
+  );
+  if (amorcage.adminCree) console.log(`  compte d'administration créé : ${amorcage.adminCree}`);
+  if (amorcage.evenementInscrit) console.log(`  événement inscrit au registre : ${amorcage.evenementInscrit}`);
+  for (const message of amorcage.messages) console.log(`  ${message}`);
 
   // Le registre de la plateforme : la liste des événements et les comptes qui
   // les portent. Sans lui, l'application se comporte comme avant — un seul

@@ -11,7 +11,9 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "tsx src/lib/sheets.test.ts && tsx src/services/appsScript.test.ts && tsx server/eventConfig.test.ts && tsx server/platform.test.ts && tsx server/tickets.test.ts",
-    "docs:sheets": "tsx scripts/generate-sheet-docs.ts"
+    "docs:sheets": "tsx scripts/generate-sheet-docs.ts",
+    "db:setup": "tsx server/cli/db.ts setup",
+    "db:status": "tsx server/cli/db.ts status"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
