@@ -70,7 +70,15 @@ app.use("/api/platform", platformRouter);
 app.use("/api/billetterie", ticketsRouter);
 app.use("/api/paiement", paiementRouter);
 
-async function startServer() {
+/**
+ * Prepare l'application : base, classeur, configuration, routes.
+ *
+ * Separee de l'ecoute d'un port, parce que tous les hebergeurs n'en ouvrent
+ * pas un. Chez un hebergeur sans etat, chaque requete reveille un processus
+ * qui appelle cette preparation puis traite la requete — d'ou l'importance
+ * qu'elle soit rejouable et qu'elle n'echoue jamais fatalement.
+ */
+async function preparerApplication() {
   await initStore();
   startSessionSweeper();
   startTokenSweeper();
@@ -205,9 +213,37 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`IndabaX Bénin Event App à l'écoute sur le port ${PORT}`);
+  return app;
+}
+
+/**
+ * La preparation, faite une seule fois.
+ *
+ * Chez un hebergeur sans etat, plusieurs requetes peuvent arriver pendant que
+ * la premiere prepare encore : garder la promesse evite de tout refaire, et
+ * surtout d'ouvrir plusieurs bassins de connexions a la base.
+ */
+let preparation: Promise<typeof app> | null = null;
+
+export function applicationPrete(): Promise<typeof app> {
+  if (!preparation) preparation = preparerApplication();
+  return preparation;
+}
+
+/** Demarre un serveur qui ecoute, pour un hebergeur classique. */
+export async function startServer() {
+  const pret = await applicationPrete();
+
+  pret.listen(PORT, "0.0.0.0", () => {
+    console.log(`Tech Event à l'écoute sur le port ${PORT}`);
   });
 }
 
-startServer();
+/*
+ * Lancer un serveur n'a de sens que si ce fichier est le point d'entree. Chez
+ * un hebergeur sans etat, il est importe par une fonction : ouvrir un port y
+ * serait au mieux inutile, au pire une erreur au demarrage.
+ */
+if (!process.env.VERCEL) {
+  startServer();
+}

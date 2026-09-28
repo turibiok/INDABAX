@@ -2,6 +2,16 @@ import crypto from 'crypto';
 import type { Request, Response } from 'express';
 import { AccountStatus, ParticipantRole } from '../src/types';
 import { capabilitiesFor, RoleCapabilities } from '../src/permissions';
+import {
+  compter as compterSessions,
+  enregistrer as enregistrerSession,
+  lire as lireSession,
+  lireBrute as lireSessionBrute,
+  modifierPourEmail as modifierSessionsPourEmail,
+  purger as purgerSessions,
+  revoquerPourEmail as revoquerSessionsPourEmail,
+  supprimer as supprimerSession,
+} from './sessionStore';
 
 /**
  * Sessions serveur.
@@ -55,7 +65,6 @@ export interface ServerSession {
   expiresAt: number;
 }
 
-const sessions = new Map<string, ServerSession>();
 
 function newSessionId(): string {
   return crypto.randomBytes(32).toString('base64url');
@@ -82,7 +91,12 @@ export function createSession(input: {
     expiresAt: now + SESSION_TTL_MS,
   };
 
-  sessions.set(session.id, session);
+  // L'ecriture est lancee sans etre attendue : la session est deja utilisable,
+  // et faire patienter la reponse de connexion sur un aller-retour vers la
+  // base n'apporterait rien. Un echec est signale, pas tu.
+  void enregistrerSession(session).catch(erreur =>
+    console.warn(`Session non enregistrée : ${(erreur as Error)?.message || erreur}`),
+  );
   return session;
 }
 
@@ -102,75 +116,49 @@ function readCookie(req: Request, name: string): string | null {
   return null;
 }
 
-export function getSession(req: Request): ServerSession | null {
+export async function getSession(req: Request): Promise<ServerSession | null> {
   const id = readCookie(req, SESSION_COOKIE);
   if (!id) return null;
 
-  const session = sessions.get(id);
-  if (!session) return null;
-
-  const now = Date.now();
-  if (now > session.expiresAt || now - session.lastSeenAt > IDLE_TIMEOUT_MS) {
-    sessions.delete(id);
-    return null;
-  }
-
-  session.lastSeenAt = now;
-  return session;
+  const lue = await lireSession(id, IDLE_TIMEOUT_MS);
+  return lue ? (lue as ServerSession) : null;
 }
 
-export function destroySession(req: Request): void {
+export async function destroySession(req: Request): Promise<void> {
   const id = readCookie(req, SESSION_COOKIE);
-  if (id) sessions.delete(id);
+  if (id) await supprimerSession(id);
 }
 
 /** Met a jour le role d'une session ouverte (l'admin vient de le changer). */
-export function updateSessionRole(
+export async function updateSessionRole(
   sessionId: string,
   patch: { role?: ParticipantRole; status?: AccountStatus; name?: string; source?: ServerSession['source'] },
-): ServerSession | null {
-  const session = sessions.get(sessionId);
-  if (!session) return null;
+): Promise<ServerSession | null> {
+  const brute = await lireSessionBrute(sessionId);
+  if (!brute) return null;
 
-  Object.assign(session, patch);
+  const session = { ...brute, ...patch } as unknown as ServerSession;
+  await enregistrerSession(session as never);
   return session;
 }
 
 /** Applique un changement de role a toutes les sessions ouvertes d'un email. */
-export function updateSessionsForEmail(
+/**
+ * Repercute un changement de compte sur les sessions deja ouvertes.
+ *
+ * Sans cela, quelqu'un dont on vient de retirer les droits les garderait
+ * jusqu'a sa prochaine connexion — c'est-a-dire potentiellement des jours.
+ */
+export async function updateSessionsForEmail(
   email: string,
-  // Le nom est modifiable par la personne elle-même : il s'affiche dans les
-  // sessions ouvertes, qui doivent donc pouvoir le suivre sans reconnexion.
-  patch: { role?: ParticipantRole; status?: AccountStatus; name?: string },
-): number {
-  let touched = 0;
-
-  for (const session of sessions.values()) {
-    if (session.email !== email) continue;
-
-    Object.assign(session, patch);
-    touched += 1;
-
-    // Un compte suspendu perd immediatement sa session.
-    if (patch.status === 'suspended') {
-      sessions.delete(session.id);
-    }
-  }
-
-  return touched;
+  patch: { role?: ParticipantRole; status?: AccountStatus; name?: string; source?: ServerSession['source'] },
+): Promise<number> {
+  return modifierSessionsPourEmail(email, patch as never);
 }
 
-export function revokeSessionsForEmail(email: string): number {
-  let removed = 0;
-
-  for (const [id, session] of sessions.entries()) {
-    if (session.email === email) {
-      sessions.delete(id);
-      removed += 1;
-    }
-  }
-
-  return removed;
+/** Revoque toutes les sessions d'une personne. */
+export async function revokeSessionsForEmail(email: string): Promise<number> {
+  return revoquerSessionsPourEmail(email);
 }
 
 export function setSessionCookie(res: Response, session: ServerSession): void {
@@ -215,15 +203,27 @@ export interface AuthedRequest extends Request {
 }
 
 /** Exige une session valide. */
-export function requireAuth(req: AuthedRequest, res: Response, next: () => void) {
-  const session = getSession(req);
+export async function requireAuth(req: AuthedRequest, res: Response, next: () => void) {
+  let session: ServerSession | null = null;
+
+  try {
+    session = await getSession(req);
+  } catch (erreur) {
+    // Une base injoignable ne doit pas passer pour une session valide : on
+    // refuse, en disant que c'est le service et non le compte.
+    console.warn(`Lecture de session impossible : ${(erreur as Error)?.message || erreur}`);
+    return res.status(503).json({
+      error: 'Service momentanément indisponible. Réessayez dans un instant.',
+      reason: 'session_unavailable',
+    });
+  }
 
   if (!session) {
     return res.status(401).json({ error: 'Session expirée ou absente. Reconnectez-vous.', reason: 'unauthenticated' });
   }
 
   if (session.status === 'suspended') {
-    destroySession(req);
+    await destroySession(req);
     clearSessionCookie(res);
     return res.status(403).json({ error: 'Ce compte a été suspendu.', reason: 'suspended' });
   }
@@ -235,8 +235,8 @@ export function requireAuth(req: AuthedRequest, res: Response, next: () => void)
 
 /** Exige une capacite precise du role, par exemple `canManageRoles`. */
 export function requireCapability(capability: keyof RoleCapabilities) {
-  return (req: AuthedRequest, res: Response, next: () => void) => {
-    requireAuth(req, res, () => {
+  return async (req: AuthedRequest, res: Response, next: () => void) => {
+    await requireAuth(req, res, () => {
       if (req.capabilities && req.capabilities[capability] === true) return next();
 
       res.status(403).json({
@@ -249,22 +249,26 @@ export function requireCapability(capability: keyof RoleCapabilities) {
 }
 
 /** Purge periodique des sessions expirees. */
+/**
+ * Purge periodique des sessions perimees.
+ *
+ * Sans effet chez un hebergeur sans etat, ou le processus ne vit pas assez
+ * longtemps pour qu'un intervalle se declenche : la lecture d'une session
+ * efface de toute facon celles qu'elle trouve perimees.
+ */
 export function startSessionSweeper(intervalMs = 15 * 60 * 1000) {
   const timer = setInterval(() => {
-    const now = Date.now();
-    for (const [id, session] of sessions.entries()) {
-      if (now > session.expiresAt || now - session.lastSeenAt > IDLE_TIMEOUT_MS) {
-        sessions.delete(id);
-      }
-    }
+    void purgerSessions(IDLE_TIMEOUT_MS).catch(erreur =>
+      console.warn(`Purge des sessions impossible : ${(erreur as Error)?.message || erreur}`),
+    );
   }, intervalMs);
 
   timer.unref?.();
   return timer;
 }
 
-export function sessionCount(): number {
-  return sessions.size;
+export function sessionCount(): Promise<number> {
+  return compterSessions();
 }
 
 /** Etat du drapeau Secure, pour l'afficher au demarrage. */

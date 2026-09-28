@@ -20,12 +20,12 @@ import {
 } from '../store';
 import { hashPassword, MIN_PASSWORD_LENGTH, validatePassword, verifyPassword } from '../passwords';
 import {
-  consumeToken,
+  consumeTokenPersistant,
   isThrottled,
-  issueToken,
+  issueTokenPersistant,
   noteRequest,
-  peekToken,
-  revokeTokensFor,
+  peekTokenPersistant,
+  revokeTokensForPersistant,
 } from '../resetTokens';
 import {
   AuthedRequest,
@@ -273,8 +273,8 @@ authRouter.post('/login', async (req, res) => {
  * n'est pas une ressource protegee mais une question, et un 401 remplirait
  * inutilement la console du navigateur d'erreurs.
  */
-authRouter.get('/session', (req, res) => {
-  const session = getSession(req);
+authRouter.get('/session', async (req, res) => {
+  const session = await getSession(req);
 
   if (!session) {
     return res.json({ session: null });
@@ -415,7 +415,7 @@ authRouter.post('/register', async (req: AuthedRequest, res) => {
     assignedBy: source === 'sheet' ? 'Synchronisation classeur' : account.assignedBy,
   });
 
-  revokeTokensFor(email);
+  await revokeTokensForPersistant(email);
 
   // Le classeur est la seule memoire qui survive a un redemarrage : sans ce
   // retour, la personne devrait se reinscrire a chaque reveil du service.
@@ -513,7 +513,7 @@ authRouter.post('/forgot', async (req: AuthedRequest, res) => {
 
   if (account.status === 'suspended') return res.json(neutral);
 
-  const { token, expiresAt } = issueToken(email);
+  const { token, expiresAt } = await issueTokenPersistant(email);
   const link = `${publicBaseUrl(req)}/?reset=${encodeURIComponent(token)}`;
 
   try {
@@ -550,7 +550,7 @@ ${link}
       });
   } catch (error: any) {
     // L'envoi a echoue : le jeton ne sert a rien, autant le retirer.
-    revokeTokensFor(email);
+    await revokeTokensForPersistant(email);
 
     const status = error instanceof SheetError ? error.status : 500;
     return res.status(status).json({
@@ -565,9 +565,9 @@ ${link}
 });
 
 /** Verifie un lien avant d'afficher le formulaire, sans le consommer. */
-authRouter.get('/reset', (req, res) => {
+authRouter.get('/reset', async (req, res) => {
   const token = typeof req.query.token === 'string' ? req.query.token : '';
-  const entry = peekToken(token);
+  const entry = await peekTokenPersistant(token);
 
   if (!entry) {
     return res.status(410).json({
@@ -588,7 +588,7 @@ authRouter.post('/reset', async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: invalid, reason: 'weak_password' });
   }
 
-  const entry = consumeToken(token);
+  const entry = await consumeTokenPersistant(token);
   if (!entry) {
     return res.status(410).json({
       error: 'Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.',
@@ -740,7 +740,7 @@ authRouter.post(
 
     // Le compte ne doit plus pouvoir servir avec l'ancien mot de passe.
     revokeSessionsForEmail(email);
-    revokeTokensFor(email);
+    await revokeTokensForPersistant(email);
 
     // La colonne du classeur doit suivre : une empreinte qui y resterait
     // ressusciterait l'ancien mot de passe au prochain redemarrage.
@@ -790,7 +790,7 @@ authRouter.post('/accounts/reload', requireCapability('canManageRoles'), async (
     // Les roles fraichement lus s'appliquent aux sessions deja ouvertes.
     let sessionsUpdated = 0;
     for (const account of accounts) {
-      sessionsUpdated += updateSessionsForEmail(account.email, {
+      sessionsUpdated += await updateSessionsForEmail(account.email, {
         role: account.role,
         status: account.status,
       });

@@ -128,4 +128,46 @@ CREATE TABLE IF NOT EXISTS tickets (
 
 CREATE INDEX IF NOT EXISTS tickets_order_idx ON tickets(order_id);
 CREATE INDEX IF NOT EXISTS tickets_event_idx ON tickets(event_slug, status);
+
+-- Sessions ouvertes.
+--
+-- Elles vivaient dans une table en memoire, ce qui suppose un serveur unique
+-- et durable. Des que le service tourne en plusieurs copies — ou sans etat,
+-- comme chez un hebergeur serverless — une requete peut atterrir sur une copie
+-- qui n'a jamais vu la session : la personne se retrouve deconnectee sans
+-- raison, au hasard des requetes.
+CREATE TABLE IF NOT EXISTS sessions (
+  id           TEXT PRIMARY KEY,
+  email        TEXT NOT NULL,
+  name         TEXT NOT NULL DEFAULT '',
+  role         TEXT NOT NULL DEFAULT 'attendee',
+  status       TEXT NOT NULL DEFAULT 'active',
+  source       TEXT NOT NULL DEFAULT 'local',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  -- Sert au delai d'inactivite : une session oubliee ouverte sur un poste
+  -- partage ne doit pas rester valable jusqu'a son echeance lointaine.
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS sessions_email_idx ON sessions(lower(email));
+CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
+
+-- Jetons de reinitialisation de mot de passe.
+--
+-- Meme raison : un lien emis par une copie du serveur doit etre reconnu par
+-- les autres, sinon la reinitialisation echoue une fois sur deux sans que
+-- personne comprenne pourquoi.
+CREATE TABLE IF NOT EXISTS reset_tokens (
+  -- L'empreinte du jeton, jamais le jeton : qui lirait cette table ne pourrait
+  -- pas s'en servir pour prendre un compte.
+  token_hash TEXT PRIMARY KEY,
+  email      TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS reset_tokens_email_idx ON reset_tokens(lower(email));
+CREATE INDEX IF NOT EXISTS reset_tokens_expiry_idx ON reset_tokens(expires_at);
 `;

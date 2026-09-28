@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { baseConfiguree, query } from './db';
 
 /**
  * Jetons de réinitialisation de mot de passe.
@@ -24,7 +25,14 @@ interface ResetEntry {
   expiresAt: number;
 }
 
-/** Indexé par empreinte du jeton, jamais par le jeton lui-même. */
+/**
+ * Indexé par empreinte du jeton, jamais par le jeton lui-même.
+ *
+ * Repli quand aucune base n'est configurée. Avec une base, les jetons y vivent :
+ * un lien émis par une copie du serveur doit être reconnu par les autres, sinon
+ * la réinitialisation échoue une fois sur deux sans que personne comprenne
+ * pourquoi.
+ */
 const entries = new Map<string, ResetEntry>();
 
 /** Dernière demande par email, pour ne pas inonder une boîte. */
@@ -61,6 +69,84 @@ export function noteRequest(email: string): void {
  * Émet un jeton pour un email. Les jetons précédents du même email sont
  * révoqués : un seul lien reste valide à la fois.
  */
+export async function issueTokenPersistant(
+  email: string,
+): Promise<{ token: string; expiresAt: Date }> {
+  const emis = issueToken(email);
+
+  if (baseConfiguree()) {
+    await query(
+      `INSERT INTO reset_tokens (token_hash, email, expires_at)
+       VALUES ($1, lower($2), to_timestamp($3/1000.0))
+       ON CONFLICT (token_hash) DO NOTHING`,
+      [fingerprint(emis.token), email, emis.expiresAt.getTime()],
+    );
+  }
+
+  return emis;
+}
+
+/**
+ * Consomme un jeton, quel que soit l'endroit ou il a ete emis.
+ *
+ * L'ecriture de `used_at` est conditionnelle : un jeton presente deux fois ne
+ * modifie aucune ligne la seconde fois, ce qui est exactement le controle
+ * attendu — un lien de reinitialisation ne doit servir qu'une fois.
+ */
+export async function consumeTokenPersistant(token: string): Promise<{ email: string } | null> {
+  const local = consumeToken(token);
+  if (local) {
+    if (baseConfiguree()) {
+      await query(`UPDATE reset_tokens SET used_at = now() WHERE token_hash = $1`, [
+        fingerprint(token),
+      ]).catch(() => undefined);
+    }
+    return local;
+  }
+
+  if (!baseConfiguree()) return null;
+
+  const r = await query(
+    `UPDATE reset_tokens SET used_at = now()
+      WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+      RETURNING email`,
+    [fingerprint(token)],
+  );
+
+  return r.rowCount ? { email: String(r.rows[0].email) } : null;
+}
+
+/** Lit un jeton sans le consommer, pour dire a qui il appartient. */
+export async function peekTokenPersistant(token: string): Promise<{ email: string } | null> {
+  const local = peekToken(token);
+  if (local) return local;
+
+  if (!baseConfiguree()) return null;
+
+  const r = await query(
+    `SELECT email FROM reset_tokens
+      WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()`,
+    [fingerprint(token)],
+  );
+
+  return r.rowCount ? { email: String(r.rows[0].email) } : null;
+}
+
+/** Revoque les jetons d'une personne, en memoire et en base. */
+export async function revokeTokensForPersistant(email: string): Promise<number> {
+  const n = revokeTokensFor(email);
+
+  if (baseConfiguree()) {
+    const r = await query(
+      `DELETE FROM reset_tokens WHERE lower(email) = lower($1) AND used_at IS NULL`,
+      [email],
+    );
+    return n + (r.rowCount || 0);
+  }
+
+  return n;
+}
+
 export function issueToken(email: string): { token: string; expiresAt: Date } {
   purgeExpired();
   revokeTokensFor(email);

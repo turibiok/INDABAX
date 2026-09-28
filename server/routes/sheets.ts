@@ -47,8 +47,15 @@ export const sheetsRouter = Router();
  * aussi, et le lien du classeur donne accès à tout son contenu, mots de passe
  * compris. « canManageRoles » est la seule capacité réservée au Super-Admin.
  */
-function estSuperAdmin(req: AuthedRequest): boolean {
-  const session = req.session || getSession(req);
+/**
+ * Dit si la requete vient d'un compte qui gere les roles.
+ *
+ * `req.session` est pose par `requireAuth` ; la lecture directe ne sert qu'aux
+ * routes ouvertes, ou l'on veut savoir si un Super-Admin regarde sans exiger
+ * qu'il le soit.
+ */
+async function estSuperAdmin(req: AuthedRequest): Promise<boolean> {
+  const session = req.session || (await getSession(req));
   return Boolean(session && capabilitiesFor(session.role).canManageRoles);
 }
 
@@ -61,8 +68,8 @@ function estSuperAdmin(req: AuthedRequest): boolean {
  * Accessible sans session : l'ecran de connexion doit pouvoir indiquer si un
  * classeur est lie, et rien ici n'est sensible.
  */
-sheetsRouter.get('/config', (req: AuthedRequest, res) => {
-  res.json({ config: getPublicSheetsConfig(estSuperAdmin(req)), bootstrapNeeded: !getSheetsConfig().isLinked });
+sheetsRouter.get('/config', async (req: AuthedRequest, res) => {
+  res.json({ config: getPublicSheetsConfig(await estSuperAdmin(req)), bootstrapNeeded: !getSheetsConfig().isLinked });
 });
 
 const TAB_FIELDS = [
@@ -75,7 +82,7 @@ const TAB_FIELDS = [
 ] as const;
 
 /** Modifie la configuration : reserve aux roles habilites. */
-sheetsRouter.put('/config', requireCapability('canManageIntegrations'), (req: AuthedRequest, res) => {
+sheetsRouter.put('/config', requireCapability('canManageIntegrations'), async (req: AuthedRequest, res) => {
   const patch: Record<string, unknown> = {};
 
   for (const field of TAB_FIELDS) {
@@ -93,7 +100,7 @@ sheetsRouter.put('/config', requireCapability('canManageIntegrations'), (req: Au
 
   updateSheetsConfig(patch);
   forgetSheetDerivedState();
-  res.json({ config: getPublicSheetsConfig(estSuperAdmin(req)) });
+  res.json({ config: getPublicSheetsConfig(await estSuperAdmin(req)) });
 });
 
 /**
@@ -159,14 +166,14 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
 
     let sessionsUpdated = 0;
     for (const account of accounts) {
-      sessionsUpdated += updateSessionsForEmail(account.email, {
+      sessionsUpdated += await updateSessionsForEmail(account.email, {
         role: account.role,
         status: account.status,
       });
     }
 
     res.json({
-      config: getPublicSheetsConfig(estSuperAdmin(req)),
+      config: getPublicSheetsConfig(await estSuperAdmin(req)),
       accounts: accounts.length,
       sessionsUpdated,
       message: `Classeur lié : ${accounts.length} compte(s) détecté(s) dans l'onglet « ${profilesTab} ».`,
@@ -179,10 +186,10 @@ sheetsRouter.post('/link', requireCapability('canManageIntegrations'), async (re
   }
 });
 
-sheetsRouter.post('/unlink', requireCapability('canManageIntegrations'), (req: AuthedRequest, res) => {
+sheetsRouter.post('/unlink', requireCapability('canManageIntegrations'), async (req: AuthedRequest, res) => {
   updateSheetsConfig({ isLinked: false, lastError: undefined });
   forgetSheetDerivedState();
-  res.json({ config: getPublicSheetsConfig(estSuperAdmin(req)) });
+  res.json({ config: getPublicSheetsConfig(await estSuperAdmin(req)) });
 });
 
 /* ------------------------------------------------------------------ *
