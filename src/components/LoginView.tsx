@@ -32,7 +32,12 @@ type Mode = 'signin' | 'register' | 'forgot' | 'reset';
 
 const MIN_LENGTH = 6;
 
-export const LoginView: React.FC = () => {
+interface LoginViewProps {
+  /** Ouvre la vitrine de la plateforme, quand elle est disponible. */
+  onPlateforme?: () => void;
+}
+
+export const LoginView: React.FC<LoginViewProps> = ({ onPlateforme }) => {
   const {
     signInWithEmail,
     registerWithEmail,
@@ -195,6 +200,20 @@ export const LoginView: React.FC = () => {
           Événement officiel
         </span>
         {eventHeadline}
+
+        {/*
+          * La passerelle vers le catalogue. Elle n'apparait que si l'hote la
+          * fournit : une installation qui ne sert qu'un evenement n'a pas de
+          * catalogue a montrer, et un lien mort vaudrait moins que rien.
+          */}
+        {onPlateforme && (
+          <button
+            onClick={onPlateforme}
+            className="ml-3 underline underline-offset-2 font-bold cursor-pointer"
+          >
+            Tous les événements
+          </button>
+        )}
       </div>
 
       <div className="flex-1 flex items-center justify-center p-4 sm:p-8">

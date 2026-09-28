@@ -7,6 +7,10 @@ import { sheetsRouter } from "./server/routes/sheets";
 import { aiRouter } from "./server/routes/ai";
 import { socialRouter } from "./server/routes/social";
 import { eventRouter } from "./server/routes/event";
+import { platformRouter } from "./server/routes/platform";
+import { ticketsRouter } from "./server/routes/tickets";
+import { registreConfigure } from "./server/platform";
+import { amorcerPlateforme } from "./server/bootstrap";
 import { reloadEventConfig } from "./server/eventConfig";
 import { warmSocialCache } from "./server/social";
 import {
@@ -49,6 +53,8 @@ app.use("/api/sheets", sheetsRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/social", socialRouter);
 app.use("/api/event", eventRouter);
+app.use("/api/platform", platformRouter);
+app.use("/api/billetterie", ticketsRouter);
 
 async function startServer() {
   await initStore();
@@ -142,6 +148,30 @@ async function startServer() {
         `${error instanceof Error ? error.message : String(error)}`,
     );
   }
+
+  // La base, si elle est configurée : tables créées, compte d'administration
+  // et reprise de l'événement décrit par l'environnement. Rien ici ne lève —
+  // une base injoignable laisse l'application démarrer en mode événement
+  // unique plutôt que d'empêcher tout le monde d'entrer.
+  const amorcage = await amorcerPlateforme();
+
+  console.log(
+    amorcage.pret
+      ? 'Base PostgreSQL prête.'
+      : 'Base PostgreSQL absente ou injoignable.',
+  );
+  if (amorcage.adminCree) console.log(`  compte d'administration créé : ${amorcage.adminCree}`);
+  if (amorcage.evenementInscrit) console.log(`  événement inscrit au registre : ${amorcage.evenementInscrit}`);
+  for (const message of amorcage.messages) console.log(`  ${message}`);
+
+  // La plateforme est servie par la base : il n'y a rien a precharger, chaque
+  // requete l'interroge. Un cache differerait d'un exemplaire du serveur a
+  // l'autre des que le service tourne en plusieurs copies.
+  console.log(
+    registreConfigure()
+      ? 'Plateforme Tech Event : registre servi par la base.'
+      : "Pas de base : mode événement unique.",
+  );
 
   // Les annonces et les messages sont relus une première fois maintenant : le
   // premier visiteur n'attend donc pas la lecture du classeur.

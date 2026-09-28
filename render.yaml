@@ -1,0 +1,67 @@
+# Description de l'infrastructure Tech Event.
+#
+# La base vit chez Neon, et non chez Render : son offre gratuite n'expire pas,
+# là où celle de Render s'efface au bout de trente jours avec ce qu'elle
+# contient. Elle n'est donc pas déclarée ici — seule son adresse est attendue.
+#
+# Aucun secret dans ce fichier. Tout ce qui en est un porte `sync: false` et se
+# renseigne dans le tableau de bord, une valeur du dépôt ne pouvant pas être
+# tenue à l'abri.
+#
+# Pour l'appliquer : Render → Blueprints → New Blueprint Instance, en pointant
+# ce dépôt. Les ressources existantes sont reprises, pas recréées.
+
+services:
+  - type: web
+    name: indabax-benin
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+
+    envVars:
+      # L'adresse de la base Neon. Prenez celle dite « pooled » — son hôte
+      # contient « -pooler » — et gardez « ?sslmode=require » : l'autre ouvre
+      # une connexion par requête et s'épuise dès que plusieurs personnes
+      # arrivent en même temps. Le serveur le signale au démarrage s'il
+      # reconnaît la mauvaise.
+      - key: DATABASE_URL
+        sync: false
+
+      - key: NODE_ENV
+        value: production
+
+      # Renseignées dans le tableau de bord : elles portent des secrets, qui
+      # n'ont pas leur place dans un dépôt.
+      - key: SHEET_URL
+        sync: false
+      - key: APPS_SCRIPT_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # Compte d'administration de la plateforme, créé au premier démarrage
+      # s'il n'existe pas. Le mot de passe ne sert qu'à cette création : le
+      # changer ensuite n'a aucun effet, un amorçage n'étant pas une
+      # réinitialisation.
+      - key: PLATFORM_ADMIN_EMAIL
+        sync: false
+      - key: PLATFORM_ADMIN_PASSWORD
+        sync: false
+      - key: PLATFORM_ADMIN_NAME
+        sync: false
+
+      # Reprise de l'événement déjà en service : sans ces valeurs, il resterait
+      # absent du registre de la plateforme.
+      - key: EVENT_NAME
+        sync: false
+      - key: EVENT_EDITION
+        sync: false
+      - key: EVENT_START_DATE
+        sync: false
+      - key: EVENT_END_DATE
+        sync: false
+      - key: EVENT_LOCATION
+        sync: false
