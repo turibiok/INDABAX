@@ -8,6 +8,7 @@ import { aiRouter } from "./server/routes/ai";
 import { socialRouter } from "./server/routes/social";
 import { eventRouter } from "./server/routes/event";
 import { platformRouter } from "./server/routes/platform";
+import { ticketsRouter } from "./server/routes/tickets";
 import { chargerRegistre, registreConfigure } from "./server/platform";
 import { amorcerPlateforme } from "./server/bootstrap";
 import { reloadEventConfig } from "./server/eventConfig";
@@ -53,6 +54,7 @@ app.use("/api/ai", aiRouter);
 app.use("/api/social", socialRouter);
 app.use("/api/event", eventRouter);
 app.use("/api/platform", platformRouter);
+app.use("/api/billetterie", ticketsRouter);
 
 async function startServer() {
   await initStore();
