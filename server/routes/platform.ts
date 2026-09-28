@@ -9,13 +9,21 @@ import {
   evenementsDe,
   evenementsPublics,
   PlatformAccount,
+  PlatformRole,
   registreConfigure,
   slugDisponible,
+  statistiques,
   tousLesComptes,
   tousLesEvenements,
   versSlug,
 } from '../platform';
-import { AuthedRequest, requireAuth } from '../sessions';
+import {
+  AuthedRequest,
+  createSession,
+  requireAuth,
+  setSessionCookie,
+  toClientSession,
+} from '../sessions';
 import { DbError } from '../db';
 import { hashPassword, verifyPassword } from '../passwords';
 
@@ -350,7 +358,27 @@ platformRouter.post('/login', async (req, res) => {
   const bon = await verifyPassword(motDePasse, compte.passwordHash);
   if (!bon) return res.status(401).json(refus);
 
-  res.json({ account: versPublic(compte) });
+  /*
+   * La session est ouverte ici, et pas seulement le mot de passe verifie :
+   * sans cela, la connexion reussissait sans donner acces a quoi que ce soit.
+   *
+   * Le role porte dans la session est celui de l'evenement — « attendee » —
+   * et non celui de la plateforme. Les deux ne se confondent pas : etre
+   * administrateur de la plateforme ne donne aucun droit dans l'evenement de
+   * quelqu'un d'autre, et les routes de plateforme relisent le role reel a
+   * chaque appel.
+   */
+  const session = createSession({
+    email: compte.email,
+    name: compte.name,
+    role: 'attendee',
+    status: 'active',
+    source: 'platform',
+  });
+
+  setSessionCookie(res, session);
+
+  res.json({ account: versPublic(compte), session: toClientSession(session) });
 });
 
 /* ------------------------------------------------------------------ *
@@ -370,6 +398,83 @@ platformRouter.get('/admin', requireAuth, async (req: AuthedRequest, res) => {
       accounts: (await tousLesComptes()).map(versPublic),
       events: (await tousLesEvenements()).map(versGestion),
     });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
+});
+
+/** Chiffres de la plateforme, pour le tableau de bord. */
+platformRouter.get('/admin/stats', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const compte = await comptePlateforme((req.session?.email || '').toLowerCase());
+    if (compte?.role !== 'admin') {
+      return res.status(403).json({ error: 'Réservé aux administrateurs.', reason: 'forbidden' });
+    }
+
+    res.json({ stats: await statistiques() });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
+});
+
+/**
+ * Change le role ou la suspension d'un compte.
+ *
+ * Deux refus, et le second compte plus que le premier : on ne se retire pas
+ * son propre role d'administrateur, et on ne retire pas le dernier. Sans cela,
+ * la plateforme se retrouverait sans personne pour la corriger — le meme piege
+ * que la table des roles d'un evenement.
+ */
+platformRouter.put('/admin/accounts/:email', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const moi = (req.session?.email || '').toLowerCase();
+    const compte = await comptePlateforme(moi);
+
+    if (compte?.role !== 'admin') {
+      return res.status(403).json({ error: 'Réservé aux administrateurs.', reason: 'forbidden' });
+    }
+
+    const cible = await comptePlateforme(req.params.email);
+    if (!cible) {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
+
+    const corps = req.body || {};
+    const role = String(corps.role || cible.role);
+    const suspendu = corps.suspended === undefined ? cible.suspended : Boolean(corps.suspended);
+
+    if (!['admin', 'organizer', 'member'].includes(role)) {
+      return res.status(400).json({ error: 'Rôle inconnu.', reason: 'bad_input' });
+    }
+
+    if (cible.email === moi && (role !== 'admin' || suspendu)) {
+      return res.status(409).json({
+        error: "Vous ne pouvez pas retirer vos propres droits : demandez-le à un autre administrateur.",
+        reason: 'self_demotion',
+      });
+    }
+
+    if (cible.role === 'admin' && (role !== 'admin' || suspendu)) {
+      const restants = (await tousLesComptes()).filter(
+        c => c.role === 'admin' && !c.suspended && c.email !== cible.email,
+      );
+
+      if (restants.length === 0) {
+        return res.status(409).json({
+          error:
+            "C'est le dernier administrateur actif : le rétrograder laisserait la plateforme sans personne pour la corriger.",
+          reason: 'last_admin',
+        });
+      }
+    }
+
+    const enregistre = await enregistrerCompte({
+      ...cible,
+      role: role as PlatformRole,
+      suspended: suspendu,
+    });
+
+    res.json({ account: versPublic(enregistre), message: 'Compte mis à jour.' });
   } catch (error) {
     repondreErreur(res, error);
   }

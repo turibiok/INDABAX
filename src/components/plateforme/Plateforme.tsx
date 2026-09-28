@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
+import { ConnexionPlateforme } from './ConnexionPlateforme';
 import { CreerEvenement } from './CreerEvenement';
 import { MesEvenements } from './MesEvenements';
 import { PageEvenement } from './PageEvenement';
+import { TableauDeBord } from './TableauDeBord';
 import { Vitrine } from './Vitrine';
 
 /**
@@ -29,7 +31,9 @@ type Vue =
   | { nom: 'vitrine' }
   | { nom: 'evenement'; slug: string }
   | { nom: 'mes-evenements' }
-  | { nom: 'creation' };
+  | { nom: 'creation' }
+  | { nom: 'plateforme' }
+  | { nom: 'connexion' };
 
 /** Lit la vue depuis l'adresse. */
 function vueDepuisAdresse(): Vue {
@@ -41,6 +45,8 @@ function vueDepuisAdresse(): Vue {
   const espace = params.get('espace');
   if (espace === 'mes-evenements') return { nom: 'mes-evenements' };
   if (espace === 'creation') return { nom: 'creation' };
+  if (espace === 'plateforme') return { nom: 'plateforme' };
+  if (espace === 'connexion') return { nom: 'connexion' };
 
   return { nom: 'vitrine' };
 }
@@ -55,6 +61,8 @@ function poserAdresse(vue: Vue) {
   if (vue.nom === 'evenement') params.set('evenement', vue.slug);
   if (vue.nom === 'mes-evenements') params.set('espace', 'mes-evenements');
   if (vue.nom === 'creation') params.set('espace', 'creation');
+  if (vue.nom === 'plateforme') params.set('espace', 'plateforme');
+  if (vue.nom === 'connexion') params.set('espace', 'connexion');
 
   const suite = params.toString();
   window.history.pushState({}, '', suite ? `?${suite}` : window.location.pathname);
@@ -83,10 +91,30 @@ export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion })
    * un refus n'explique rien a qui n'a rien demande.
    */
   useEffect(() => {
-    if (!connecte && (vue.nom === 'mes-evenements' || vue.nom === 'creation')) {
+    const reservee =
+      vue.nom === 'mes-evenements' || vue.nom === 'creation' || vue.nom === 'plateforme';
+
+    if (!connecte && reservee) {
       aller({ nom: 'vitrine' });
     }
   }, [connecte, vue, aller]);
+
+  if (vue.nom === 'connexion') {
+    return (
+      <ConnexionPlateforme
+        onConnecte={() => {
+          /*
+           * La page est rechargee apres connexion : la session vit dans un
+           * cookie que le reste de l'application lit au demarrage, et lui
+           * faire redecouvrir cet etat en cours de route serait plus fragile
+           * qu'un rechargement franc.
+           */
+          window.location.search = '?espace=mes-evenements';
+        }}
+        onRetour={() => aller({ nom: 'vitrine' })}
+      />
+    );
+  }
 
   if (vue.nom === 'evenement') {
     return <PageEvenement slug={vue.slug} onRetour={() => aller({ nom: 'vitrine' })} />;
@@ -101,12 +129,17 @@ export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion })
     );
   }
 
+  if (vue.nom === 'plateforme') {
+    return <TableauDeBord onRetour={() => aller({ nom: 'mes-evenements' })} />;
+  }
+
   if (vue.nom === 'mes-evenements') {
     return (
       <MesEvenements
         onCreer={() => aller({ nom: 'creation' })}
         onOuvrir={slug => aller({ nom: 'evenement', slug })}
         onVitrine={() => aller({ nom: 'vitrine' })}
+        onPlateforme={() => aller({ nom: 'plateforme' })}
       />
     );
   }
@@ -114,7 +147,7 @@ export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion })
   return (
     <Vitrine
       onOuvrir={slug => aller({ nom: 'evenement', slug })}
-      onConnexion={() => (connecte ? aller({ nom: 'mes-evenements' }) : onConnexion())}
+      onConnexion={() => aller({ nom: connecte ? 'mes-evenements' : 'connexion' })}
     />
   );
 };

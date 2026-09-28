@@ -262,3 +262,54 @@ export async function enregistrerCompte(compte: PlatformAccount): Promise<Platfo
 
   return versCompte(r.rows[0]);
 }
+
+/* ------------------------------------------------------------------ *
+ * Chiffres
+ * ------------------------------------------------------------------ */
+
+export interface StatistiquesPlateforme {
+  comptes: number;
+  organisateurs: number;
+  evenements: number;
+  publies: number;
+  commandes: number;
+  commandesPayees: number;
+  billets: number;
+  billetsUtilises: number;
+  /** Recettes encaissees, par devise et dans la plus petite unite. */
+  recettes: { devise: string; montant: number }[];
+}
+
+/**
+ * Chiffres de la plateforme.
+ *
+ * Les recettes ne comptent que les commandes reglees : inclure celles qui sont
+ * en attente afficherait un montant qui n'a pas ete encaisse, et sur lequel
+ * personne ne devrait compter.
+ */
+export async function statistiques(): Promise<StatistiquesPlateforme> {
+  const un = async (sql: string) => Number((await query(sql)).rows[0]?.n || 0);
+
+  const recettes = await query(
+    `SELECT currency, SUM(total_minor)::bigint AS total
+       FROM orders WHERE status = 'paid'
+      GROUP BY currency ORDER BY currency`,
+  );
+
+  return {
+    comptes: await un(`SELECT COUNT(*)::int AS n FROM platform_accounts`),
+    organisateurs: await un(
+      `SELECT COUNT(*)::int AS n FROM platform_accounts WHERE role IN ('admin','organizer')`,
+    ),
+    evenements: await un(`SELECT COUNT(*)::int AS n FROM events`),
+    publies: await un(`SELECT COUNT(*)::int AS n FROM events WHERE status = 'published'`),
+    commandes: await un(`SELECT COUNT(*)::int AS n FROM orders`),
+    commandesPayees: await un(`SELECT COUNT(*)::int AS n FROM orders WHERE status = 'paid'`),
+    billets: await un(`SELECT COUNT(*)::int AS n FROM tickets WHERE status <> 'void'`),
+    billetsUtilises: await un(`SELECT COUNT(*)::int AS n FROM tickets WHERE status = 'used'`),
+    recettes: recettes.rows.map(l => ({
+      devise: String(l.currency),
+      montant: Number(l.total || 0),
+    })),
+  };
+}

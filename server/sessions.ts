@@ -42,7 +42,14 @@ export interface ServerSession {
   role: ParticipantRole;
   status: AccountStatus;
   /** Origine du role : classeur, table locale du serveur, ou email admin d'amorcage. */
-  source: 'sheet' | 'local' | 'bootstrap';
+  /**
+   * D'ou vient le compte qui a ouvert cette session.
+   *
+   * « platform » designe un compte de la plateforme, qui n'existe pas dans le
+   * classeur d'un evenement : le distinguer evite qu'une synchronisation du
+   * classeur le croie disparu et le revoque.
+   */
+  source: 'sheet' | 'local' | 'bootstrap' | 'platform';
   createdAt: number;
   lastSeenAt: number;
   expiresAt: number;

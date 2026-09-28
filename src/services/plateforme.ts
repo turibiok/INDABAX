@@ -134,12 +134,89 @@ export function modifierEvenement(
  * Comptes
  * ------------------------------------------------------------------ */
 
+/** Ouvre une session de plateforme. Distincte de celle d'un événement. */
+export function connexionPlateforme(
+  email: string,
+  password: string,
+): Promise<{ account: ComptePlateforme }> {
+  return appel('/api/platform/login', { method: 'POST', body: { email, password } });
+}
+
 export function inscrireOrganisateur(input: {
   email: string;
   name: string;
   password: string;
 }): Promise<{ ok: boolean; message: string }> {
   return appel('/api/platform/register', { method: 'POST', body: input });
+}
+
+/* ------------------------------------------------------------------ *
+ * Administration
+ * ------------------------------------------------------------------ */
+
+export interface StatistiquesPlateforme {
+  comptes: number;
+  organisateurs: number;
+  evenements: number;
+  publies: number;
+  commandes: number;
+  commandesPayees: number;
+  billets: number;
+  billetsUtilises: number;
+  /** Recettes encaissées, par devise, dans la plus petite unité. */
+  recettes: { devise: string; montant: number }[];
+}
+
+export function tableauDeBord(): Promise<{
+  accounts: ComptePlateforme[];
+  events: EvenementGere[];
+}> {
+  return appel('/api/platform/admin');
+}
+
+export function chiffresPlateforme(): Promise<{ stats: StatistiquesPlateforme }> {
+  return appel('/api/platform/admin/stats');
+}
+
+export function modifierCompte(
+  email: string,
+  patch: { role?: ComptePlateforme['role']; suspended?: boolean },
+): Promise<{ account: ComptePlateforme; message: string }> {
+  return appel(`/api/platform/admin/accounts/${encodeURIComponent(email)}`, {
+    method: 'PUT',
+    body: patch,
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Paiement
+ * ------------------------------------------------------------------ */
+
+export function etatPaiement(): Promise<{
+  configured: boolean;
+  environment: string;
+  canConfirm: boolean;
+}> {
+  return appel('/api/paiement/etat');
+}
+
+/** Ouvre une page de paiement pour une commande déjà passée. */
+export function payerCommande(
+  slug: string,
+  orderId: string,
+): Promise<{ url: string; message: string }> {
+  return appel(
+    `/api/paiement/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderId)}/pay`,
+    { method: 'POST' },
+  );
+}
+
+/** État d'une commande. Le serveur interroge FedaPay si besoin. */
+export function etatCommande(
+  slug: string,
+  orderId: string,
+): Promise<{ order: { id: string; status: string; totalMinor: number; currency: string } }> {
+  return appel(`/api/paiement/${encodeURIComponent(slug)}/orders/${encodeURIComponent(orderId)}`);
 }
 
 /* ------------------------------------------------------------------ *

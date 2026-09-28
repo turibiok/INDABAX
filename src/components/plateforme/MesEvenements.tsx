@@ -22,6 +22,8 @@ interface MesEvenementsProps {
   onCreer: () => void;
   onOuvrir: (slug: string) => void;
   onVitrine: () => void;
+  /** Ouvre le tableau de bord. Proposé aux seuls administrateurs. */
+  onPlateforme: () => void;
 }
 
 const ETIQUETTE_STATUT: Record<EvenementGere['status'], string> = {
@@ -30,7 +32,12 @@ const ETIQUETTE_STATUT: Record<EvenementGere['status'], string> = {
   archived: 'Archivé',
 };
 
-export const MesEvenements: React.FC<MesEvenementsProps> = ({ onCreer, onOuvrir, onVitrine }) => {
+export const MesEvenements: React.FC<MesEvenementsProps> = ({
+  onCreer,
+  onOuvrir,
+  onVitrine,
+  onPlateforme,
+}) => {
   const [compte, setCompte] = useState<ComptePlateforme | null>(null);
   const [evenements, setEvenements] = useState<EvenementGere[]>([]);
   const [peutCreer, setPeutCreer] = useState(false);
@@ -83,6 +90,19 @@ export const MesEvenements: React.FC<MesEvenementsProps> = ({ onCreer, onOuvrir,
               <span className="text-xs text-stone-500">
                 {compte.name} · {compte.role === 'admin' ? 'administrateur' : compte.role === 'organizer' ? 'organisateur' : 'membre'}
               </span>
+            )}
+
+            {/*
+              * L'entrée n'apparaît que pour un administrateur, mais le serveur
+              * refuse de toute façon : cacher un lien ne protège rien.
+              */}
+            {compte?.role === 'admin' && (
+              <button
+                onClick={onPlateforme}
+                className="px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 text-xs font-bold cursor-pointer"
+              >
+                Plateforme
+              </button>
             )}
 
             {peutCreer && (
