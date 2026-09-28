@@ -9,7 +9,7 @@ import { socialRouter } from "./server/routes/social";
 import { eventRouter } from "./server/routes/event";
 import { platformRouter } from "./server/routes/platform";
 import { ticketsRouter } from "./server/routes/tickets";
-import { chargerRegistre, registreConfigure } from "./server/platform";
+import { registreConfigure } from "./server/platform";
 import { amorcerPlateforme } from "./server/bootstrap";
 import { reloadEventConfig } from "./server/eventConfig";
 import { warmSocialCache } from "./server/social";
@@ -164,20 +164,14 @@ async function startServer() {
   if (amorcage.evenementInscrit) console.log(`  événement inscrit au registre : ${amorcage.evenementInscrit}`);
   for (const message of amorcage.messages) console.log(`  ${message}`);
 
-  // Le registre de la plateforme : la liste des événements et les comptes qui
-  // les portent. Sans lui, l'application se comporte comme avant — un seul
-  // événement, celui que SHEET_URL désigne.
-  if (registreConfigure()) {
-    const registre = await chargerRegistre();
-    console.log(
-      `Plateforme Tech Event : ${registre.events} événement(s), ${registre.accounts} compte(s).`,
-    );
-    for (const erreur of registre.erreurs) console.warn(`  ${erreur}`);
-  } else {
-    console.log(
-      "Registre de plateforme non configuré (PLATFORM_SHEET_URL) : mode événement unique.",
-    );
-  }
+  // La plateforme est servie par la base : il n'y a rien a precharger, chaque
+  // requete l'interroge. Un cache differerait d'un exemplaire du serveur a
+  // l'autre des que le service tourne en plusieurs copies.
+  console.log(
+    registreConfigure()
+      ? 'Plateforme Tech Event : registre servi par la base.'
+      : "Pas de base : mode événement unique.",
+  );
 
   // Les annonces et les messages sont relus une première fois maintenant : le
   // premier visiteur n'attend donc pas la lecture du classeur.

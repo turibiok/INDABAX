@@ -1,16 +1,25 @@
 /**
  * Verifie le registre de la plateforme.
  *
- * Ces fonctions decident a qui appartient quel evenement, et qui peut se
- * connecter. Une erreur ici ne fait pas planter l'application : elle donne
- * l'evenement de quelqu'un a quelqu'un d'autre.
+ * Il decide a qui appartient quel evenement. Une erreur ici ne fait pas
+ * planter l'application : elle donne l'evenement de quelqu'un a quelqu'un
+ * d'autre.
+ *
+ * Sans `DATABASE_URL`, seule la fabrication des identifiants d'URL est
+ * verifiee — le reste demande une base, et le dire vaut mieux que de le
+ * simuler.
  */
 
+import { fermerBase, preparerBase, query } from './db';
 import {
-  compteDepuisLigne,
-  compteVersLigne,
-  evenementDepuisLigne,
-  evenementVersLigne,
+  comptePlateforme,
+  enregistrerCompte,
+  enregistrerEvenement,
+  EventRecord,
+  evenementParSlug,
+  evenementsDe,
+  evenementsPublics,
+  slugDisponible,
   versSlug,
 } from './platform';
 
@@ -36,130 +45,173 @@ check('ponctuation remplacee', versSlug('IA & Santé : 2027'), 'ia-sante-2027');
 check('tirets de bord retires', versSlug('  --Hackathon--  '), 'hackathon');
 check('chaine vide reste vide', versSlug(''), '');
 check('emoji et symboles ecartes', versSlug('Tech 🚀 Event'), 'tech-event');
+check('longueur bornee', versSlug('a'.repeat(200)).length, 60);
 
-console.log('\n--- evenementDepuisLigne ---');
+/** Un evenement complet, pour ne pas repeter quinze champs a chaque essai. */
+function evenement(patch: Partial<EventRecord>): EventRecord {
+  return {
+    slug: `${P}-defaut`,
+    name: 'Essai',
+    edition: '2027',
+    startDate: '2027-05-01',
+    endDate: '2027-05-03',
+    location: 'Cotonou',
+    summary: '',
+    ownerEmail: `a@${P}.invalid`,
+    status: 'draft',
+    sheetUrl: '',
+    appsScriptUrl: '',
+    logoUrl: '',
+    posterUrl: '',
+    primaryColor: '#047857',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...patch,
+  };
+}
 
-{
-  const e = evenementDepuisLigne({
-    Identifiant: 'indabax-benin-2026',
-    Nom: 'IndabaX Bénin',
-    'Édition': '2026',
-    'Début': '2026-09-18',
-    Fin: '2026-09-20',
-    Lieu: 'Cotonou',
-    Organisateur: 'Contact@IndabaX.BJ',
-    Statut: 'publié',
-    Classeur: 'https://docs.google.com/spreadsheets/d/XYZ/edit',
-    Affiche: 'https://exemple.org/affiche.jpg',
+/**
+ * Ces verifications demandent PostgreSQL.
+ *
+ * pg-mem n'accepte ni `NULLIF(...)::date` dans une insertion, ni la clause
+ * `ON CONFLICT ... DO UPDATE` telle qu'elle est ecrite ici. Plutot que de
+ * tordre le code pour qu'un double l'accepte — ce qui reviendrait a ecrire
+ * pour l'outil de test et non pour la base reelle — elles s'executent contre
+ * une vraie base, ou pas du tout.
+ */
+const VRAIE_BASE = Boolean((process.env.DATABASE_URL || '').trim());
+
+/** Prefixe propre a cette execution, pour ne rien ecraser dans une base qui sert. */
+const P = `essai-${Date.now().toString(36)}`;
+
+async function nettoyer() {
+  await query(`DELETE FROM events WHERE slug LIKE $1`, [`${P}%`]);
+  await query(`DELETE FROM platform_accounts WHERE email LIKE $1`, [`%@${P}.invalid`]);
+}
+
+async function main() {
+  if (!VRAIE_BASE) {
+    console.log(
+      '\n  ????  registre non vérifié — lancez avec DATABASE_URL pour exercer la base',
+    );
+    console.log(`\n=== ${reussis} reussis, ${echoues} echoues ===`);
+    if (echoues > 0) process.exit(1);
+    return;
+  }
+
+  await preparerBase();
+  await nettoyer();
+
+  console.log('\n--- comptes ---');
+
+  await enregistrerCompte({
+    email: `Alice@${P}.INVALID`,
+    name: 'Alice',
+    role: 'organizer',
+    passwordHash: 'scrypt$aaa$bbb',
+    createdAt: new Date().toISOString(),
+    suspended: false,
   });
 
-  check("l'identifiant est repris", e?.slug, 'indabax-benin-2026');
-  check('le nom aussi', e?.name, 'IndabaX Bénin');
-  check("l'email du propriétaire est normalisé", e?.ownerEmail, 'contact@indabax.bj');
-  check('« publié » vaut published', e?.status, 'published');
-  check("l'affiche est conservée", e?.posterUrl, 'https://exemple.org/affiche.jpg');
-  check('une couleur absente prend la valeur par défaut', e?.primaryColor, '#047857');
-}
+  const alice = await comptePlateforme(`alice@${P}.invalid`);
+  check("l'email est normalisé à l'écriture", alice?.email, `alice@${P}.invalid`);
+  check('le rôle est conservé', alice?.role, 'organizer');
 
-{
-  // L'identifiant se deduit du nom quand la colonne est vide : un organisateur
-  // qui remplit la feuille a la main ne devrait pas avoir a l'inventer.
-  const e = evenementDepuisLigne({ Nom: 'Forum Numérique Bénin' });
-  check("l'identifiant est déduit du nom", e?.slug, 'forum-numerique-benin');
-}
+  const retrouvee = await comptePlateforme(`ALICE@${P}.INVALID`);
+  check('et la recherche ignore la casse', retrouvee?.email, `alice@${P}.invalid`);
 
-{
-  check('une ligne sans nom est ignorée', evenementDepuisLigne({ Identifiant: 'x' }), null);
-  check('une ligne vide est ignorée', evenementDepuisLigne({}), null);
-}
+  check('un compte inconnu ne renvoie rien', await comptePlateforme(`personne@${P}.invalid`), undefined);
 
-{
-  // Un statut inconnu ne doit pas publier : le brouillon est le repli sur.
-  const e = evenementDepuisLigne({ Nom: 'Essai', Statut: 'peut-être' });
-  check('un statut inconnu reste un brouillon', e?.status, 'draft');
-}
+  {
+    // Renommer un compte ne doit pas effacer son mot de passe : l'ecran qui
+    // change le nom n'a aucune raison de connaitre l'empreinte.
+    await enregistrerCompte({
+      email: `alice@${P}.invalid`,
+      name: 'Alice Modifiée',
+      role: 'organizer',
+      createdAt: new Date().toISOString(),
+      suspended: false,
+    });
 
-{
-  const e = evenementDepuisLigne({ nom: 'Essai', statut: 'ARCHIVE', lieu: 'Porto-Novo' });
-  check('en-têtes sans accents ni casse', e?.location, 'Porto-Novo');
-  check('« ARCHIVE » vaut archived', e?.status, 'archived');
-}
+    const apres = await comptePlateforme(`alice@${P}.invalid`);
+    check('le nom change', apres?.name, 'Alice Modifiée');
+    check("l'empreinte survit", apres?.passwordHash, 'scrypt$aaa$bbb');
+  }
 
-console.log('\n--- aller-retour événement ---');
+  console.log('\n--- événements ---');
 
-{
-  const avant = evenementDepuisLigne({
-    Identifiant: 'forum-2027',
-    Nom: 'Forum',
-    'Édition': '2027',
-    'Début': '2027-05-01',
-    Fin: '2027-05-03',
-    Lieu: 'Cotonou',
-    'Résumé': 'Trois jours de rencontres.',
-    Organisateur: 'moi@exemple.org',
-    Statut: 'published',
-    Classeur: 'https://docs.google.com/spreadsheets/d/ABC/edit',
-    'Apps Script': 'https://script.google.com/macros/s/DEF/exec',
-    Logo: 'https://exemple.org/logo.png',
-    Affiche: 'https://exemple.org/affiche.png',
-    Couleur: '#123456',
-  })!;
-
-  const apres = evenementDepuisLigne(evenementVersLigne(avant))!;
-
-  check('tout traverse écriture puis relecture', apres, avant);
-}
-
-console.log('\n--- comptes de plateforme ---');
-
-{
-  const c = compteDepuisLigne({
-    Email: 'Moi@Exemple.ORG',
-    Nom: 'Moi',
-    'Rôle': 'Organisateur',
-    Empreinte: 'scrypt$aaa$bbb',
+  await enregistrerCompte({
+    email: `bob@${P}.invalid`,
+    name: 'Bob',
+    role: 'organizer',
+    createdAt: new Date().toISOString(),
+    suspended: false,
   });
 
-  check("l'email est normalisé", c?.email, 'moi@exemple.org');
-  check('le rôle est reconnu', c?.role, 'organizer');
-  check("l'empreinte est conservée", c?.passwordHash, 'scrypt$aaa$bbb');
+  await enregistrerEvenement(
+    evenement({ slug: `${P}-forum`, name: 'Forum', ownerEmail: `alice@${P}.invalid`, status: 'published' }),
+  );
+  await enregistrerEvenement(
+    evenement({ slug: `${P}-atelier`, name: 'Atelier', ownerEmail: `alice@${P}.invalid` }),
+  );
+  await enregistrerEvenement(
+    evenement({ slug: `${P}-hack`, name: 'Hack', ownerEmail: `bob@${P}.invalid`, status: 'published' }),
+  );
+
+  // La base peut contenir d'autres evenements : on ne juge que les siens.
+  const publics = (await evenementsPublics()).filter(e => e.slug.startsWith(P));
+  check('seuls les publiés sont publics', publics.map(e => e.slug).sort(), [`${P}-forum`, `${P}-hack`]);
+
+  const dAlice = await evenementsDe(`alice@${P}.invalid`);
+  check(
+    'chacun ne voit que les siens',
+    dAlice.map(e => e.slug).sort(),
+    [`${P}-atelier`, `${P}-forum`],
+  );
+
+  check('un brouillon reste accessible à son propriétaire', dAlice.some(e => e.status === 'draft'), true);
+
+  {
+    const lu = await evenementParSlug(`${P}-forum`);
+    check('les dates traversent la base', [lu?.startDate, lu?.endDate], ['2027-05-01', '2027-05-03']);
+  }
+
+  {
+    /*
+     * Le cas qui compte : renvoyer un evenement existant avec un autre
+     * proprietaire ne doit pas le lui donner. Sans cela, il suffirait de
+     * connaitre un identifiant pour s'approprier l'evenement d'un autre.
+     */
+    await enregistrerEvenement(
+      evenement({ slug: `${P}-forum`, name: 'Forum détourné', ownerEmail: `bob@${P}.invalid` }),
+    );
+
+    const apres = await evenementParSlug(`${P}-forum`);
+    check('le propriétaire ne se transmet pas', apres?.ownerEmail, `alice@${P}.invalid`);
+    check('mais le reste se modifie bien', apres?.name, 'Forum détourné');
+  }
+
+  console.log('\n--- identifiants disponibles ---');
+
+  check(
+    'un nom libre donne son identifiant',
+    await slugDisponible('Congrès Vert Inédit', '2099'),
+    'congres-vert-inedit-2099',
+  );
+  check(
+    'un identifiant pris reçoit un suffixe',
+    await slugDisponible(P, 'forum'),
+    `${P}-forum-2`,
+  );
+
+  await nettoyer();
+  await fermerBase();
+
+  console.log(`\n=== ${reussis} reussis, ${echoues} echoues ===`);
+  if (echoues > 0) process.exit(1);
 }
 
-{
-  // Un mot de passe en clair dans le registre donnerait acces a TOUS les
-  // evenements : mieux vaut un compte inutilisable qu'un compte devinable.
-  const c = compteDepuisLigne({ Email: 'moi@exemple.org', Empreinte: 'motdepasse' });
-  check('un secret en clair est refusé', c?.passwordHash, undefined);
-}
-
-{
-  const c = compteDepuisLigne({ Email: 'moi@exemple.org', 'Rôle': 'inconnu' });
-  check('un rôle inconnu retombe sur membre', c?.role, 'member');
-}
-
-{
-  check('une ligne sans email est ignorée', compteDepuisLigne({ Nom: 'Personne' }), null);
-  check('une adresse sans arobase est ignorée', compteDepuisLigne({ Email: 'pas-un-email' }), null);
-}
-
-{
-  const c = compteDepuisLigne({ Email: 'moi@exemple.org', Suspendu: 'oui' });
-  check('la suspension est lue', c?.suspended, true);
-}
-
-{
-  const avant = compteDepuisLigne({
-    Email: 'moi@exemple.org',
-    Nom: 'Moi',
-    'Rôle': 'admin',
-    Empreinte: 'scrypt$aaa$bbb',
-    Suspendu: 'non',
-  })!;
-
-  const apres = compteDepuisLigne(compteVersLigne(avant))!;
-  check('aller-retour du compte', apres, avant);
-}
-
-console.log(`\n=== ${reussis} reussis, ${echoues} echoues ===`);
-
-if (echoues > 0) process.exit(1);
+main().catch(e => {
+  console.log('échec du test : ' + (e?.stack || e));
+  process.exit(1);
+});

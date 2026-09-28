@@ -48,12 +48,12 @@ function exigeBase(res: any): boolean {
  * Rend « introuvable » plutot qu'« interdit » quand ce n'est pas le cas : la
  * difference dirait a un curieux quels evenements existent.
  */
-function evenementDeLOrganisateur(req: AuthedRequest, slug: string) {
-  const evenement = evenementParSlug(slug);
+async function evenementDeLOrganisateur(req: AuthedRequest, slug: string) {
+  const evenement = await evenementParSlug(slug);
   if (!evenement) return null;
 
   const email = (req.session?.email || '').toLowerCase();
-  const compte = comptePlateforme(email);
+  const compte = await comptePlateforme(email);
 
   if (compte?.suspended) return null;
   if (compte?.role === 'admin') return evenement;
@@ -74,7 +74,7 @@ function evenementDeLOrganisateur(req: AuthedRequest, slug: string) {
 ticketsRouter.get('/:slug/tickets', async (req, res) => {
   if (!exigeBase(res)) return;
 
-  const evenement = evenementParSlug(req.params.slug);
+  const evenement = await evenementParSlug(req.params.slug);
   if (!evenement || evenement.status !== 'published') {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
   }
@@ -110,7 +110,7 @@ ticketsRouter.get('/:slug/tickets', async (req, res) => {
 ticketsRouter.post('/:slug/orders', async (req, res) => {
   if (!exigeBase(res)) return;
 
-  const evenement = evenementParSlug(req.params.slug);
+  const evenement = await evenementParSlug(req.params.slug);
   if (!evenement || evenement.status !== 'published') {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
   }
@@ -153,7 +153,7 @@ ticketsRouter.post('/:slug/orders', async (req, res) => {
 ticketsRouter.post('/:slug/tickets', requireAuth, async (req: AuthedRequest, res) => {
   if (!exigeBase(res)) return;
 
-  const evenement = evenementDeLOrganisateur(req, req.params.slug);
+  const evenement = await evenementDeLOrganisateur(req, req.params.slug);
   if (!evenement) {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
   }
@@ -183,7 +183,7 @@ ticketsRouter.post('/:slug/tickets', requireAuth, async (req: AuthedRequest, res
 ticketsRouter.get('/:slug/tickets/manage', requireAuth, async (req: AuthedRequest, res) => {
   if (!exigeBase(res)) return;
 
-  const evenement = evenementDeLOrganisateur(req, req.params.slug);
+  const evenement = await evenementDeLOrganisateur(req, req.params.slug);
   if (!evenement) {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
   }
@@ -199,7 +199,7 @@ ticketsRouter.get('/:slug/tickets/manage', requireAuth, async (req: AuthedReques
 ticketsRouter.post('/:slug/check-in', requireAuth, async (req: AuthedRequest, res) => {
   if (!exigeBase(res)) return;
 
-  const evenement = evenementDeLOrganisateur(req, req.params.slug);
+  const evenement = await evenementDeLOrganisateur(req, req.params.slug);
   if (!evenement) {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
   }
@@ -225,7 +225,7 @@ ticketsRouter.post('/:slug/check-in', requireAuth, async (req: AuthedRequest, re
 ticketsRouter.post('/:slug/orders/:id/paid', requireAuth, async (req: AuthedRequest, res) => {
   if (!exigeBase(res)) return;
 
-  const evenement = evenementDeLOrganisateur(req, req.params.slug);
+  const evenement = await evenementDeLOrganisateur(req, req.params.slug);
   if (!evenement) {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
   }
@@ -248,7 +248,7 @@ ticketsRouter.post('/:slug/orders/:id/paid', requireAuth, async (req: AuthedRequ
 ticketsRouter.post('/:slug/orders/:id/cancel', requireAuth, async (req: AuthedRequest, res) => {
   if (!exigeBase(res)) return;
 
-  const evenement = evenementDeLOrganisateur(req, req.params.slug);
+  const evenement = await evenementDeLOrganisateur(req, req.params.slug);
   if (!evenement) {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
   }

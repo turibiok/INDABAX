@@ -1,11 +1,9 @@
 import { Router } from 'express';
 
 import {
-  chargerRegistre,
   comptePlateforme,
   enregistrerCompte,
   enregistrerEvenement,
-  etatRegistre,
   EventRecord,
   evenementParSlug,
   evenementsDe,
@@ -18,7 +16,7 @@ import {
   versSlug,
 } from '../platform';
 import { AuthedRequest, requireAuth } from '../sessions';
-import { SheetError } from '../sheetsGateway';
+import { DbError } from '../db';
 import { hashPassword, verifyPassword } from '../passwords';
 
 /**
@@ -36,7 +34,7 @@ import { hashPassword, verifyPassword } from '../passwords';
 export const platformRouter = Router();
 
 function repondreErreur(res: any, error: unknown) {
-  if (error instanceof SheetError) {
+  if (error instanceof DbError) {
     return res.status(error.status).json({ error: error.message, reason: error.reason });
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -81,22 +79,32 @@ function versPublic(c: PlatformAccount) {
  * ------------------------------------------------------------------ */
 
 /** Les evenements publies. Lisible sans connexion : c'est la vitrine. */
-platformRouter.get('/events', (_req, res) => {
-  res.json({
-    configured: registreConfigure(),
-    events: evenementsPublics().map(versVitrine),
-  });
+platformRouter.get('/events', async (_req, res) => {
+  if (!registreConfigure()) {
+    return res.json({ configured: false, events: [] });
+  }
+
+  try {
+    const evenements = await evenementsPublics();
+    res.json({ configured: true, events: evenements.map(versVitrine) });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
 });
 
 /** Un evenement publie, par son identifiant d'URL. */
-platformRouter.get('/events/:slug', (req, res) => {
-  const evenement = evenementParSlug(req.params.slug);
+platformRouter.get('/events/:slug', async (req, res) => {
+  try {
+    const evenement = await evenementParSlug(req.params.slug);
 
-  if (!evenement || evenement.status !== 'published') {
-    return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
+    if (!evenement || evenement.status !== 'published') {
+      return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
+    }
+
+    res.json({ event: versVitrine(evenement) });
+  } catch (error) {
+    repondreErreur(res, error);
   }
-
-  res.json({ event: versVitrine(evenement) });
 });
 
 /* ------------------------------------------------------------------ *
@@ -110,16 +118,22 @@ platformRouter.get('/events/:slug', (req, res) => {
  * siens. Le filtrage se fait ici, cote serveur, et non en cachant des lignes
  * dans le navigateur.
  */
-platformRouter.get('/mine', requireAuth, (req: AuthedRequest, res) => {
+platformRouter.get('/mine', requireAuth, async (req: AuthedRequest, res) => {
   const email = (req.session?.email || '').toLowerCase();
-  const compte = comptePlateforme(email);
-  const estAdmin = compte?.role === 'admin';
 
-  res.json({
-    account: compte ? versPublic(compte) : { email, name: email, role: 'member', suspended: false },
-    events: (estAdmin ? tousLesEvenements() : evenementsDe(email)).map(versGestion),
-    canCreate: compte?.role === 'admin' || compte?.role === 'organizer',
-  });
+  try {
+    const compte = await comptePlateforme(email);
+    const estAdmin = compte?.role === 'admin';
+    const evenements = estAdmin ? await tousLesEvenements() : await evenementsDe(email);
+
+    res.json({
+      account: compte ? versPublic(compte) : { email, name: email, role: 'member', suspended: false },
+      events: evenements.map(versGestion),
+      canCreate: compte?.role === 'admin' || compte?.role === 'organizer',
+    });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
 });
 
 /* ------------------------------------------------------------------ *
@@ -158,7 +172,7 @@ function valider(corps: CorpsEvenement): string[] {
 
 platformRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
   const email = (req.session?.email || '').toLowerCase();
-  const compte = comptePlateforme(email);
+  const compte = await comptePlateforme(email);
 
   if (!compte || compte.suspended || (compte.role !== 'admin' && compte.role !== 'organizer')) {
     return res.status(403).json({
@@ -180,7 +194,7 @@ platformRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
   const maintenant = new Date().toISOString();
 
   const evenement: EventRecord = {
-    slug: slugDisponible(corps.name || '', corps.edition || ''),
+    slug: await slugDisponible(corps.name || '', corps.edition || ''),
     name: (corps.name || '').trim(),
     edition: (corps.edition || '').trim(),
     startDate: (corps.startDate || '').trim(),
@@ -211,8 +225,8 @@ platformRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
 /** Modifie un evenement dont on repond. */
 platformRouter.put('/events/:slug', requireAuth, async (req: AuthedRequest, res) => {
   const email = (req.session?.email || '').toLowerCase();
-  const compte = comptePlateforme(email);
-  const existant = evenementParSlug(req.params.slug);
+  const compte = await comptePlateforme(email);
+  const existant = await evenementParSlug(req.params.slug);
 
   if (!existant) {
     return res.status(404).json({ error: 'Événement introuvable.', reason: 'not_found' });
@@ -297,7 +311,7 @@ platformRouter.post('/register', async (req, res) => {
       'Si cette adresse peut être utilisée, le compte est créé. Connectez-vous pour continuer.',
   };
 
-  if (comptePlateforme(email)) return res.json(neutre);
+  if (await comptePlateforme(email)) return res.json(neutre);
 
   try {
     await enregistrerCompte({
@@ -306,6 +320,7 @@ platformRouter.post('/register', async (req, res) => {
       role: 'organizer',
       passwordHash: await hashPassword(motDePasse),
       createdAt: new Date().toISOString(),
+      suspended: false,
     });
 
     res.json(neutre);
@@ -320,7 +335,7 @@ platformRouter.post('/login', async (req, res) => {
   const email = String(corps.email || '').trim().toLowerCase();
   const motDePasse = String(corps.password || '');
 
-  const compte = comptePlateforme(email);
+  const compte = await comptePlateforme(email);
   const refus = { error: 'Adresse ou mot de passe incorrect.', reason: 'bad_credentials' };
 
   /*
@@ -342,34 +357,22 @@ platformRouter.post('/login', async (req, res) => {
  * Administration
  * ------------------------------------------------------------------ */
 
-/** Etat du registre et liste des comptes. Reserve aux administrateurs. */
-platformRouter.get('/admin', requireAuth, (req: AuthedRequest, res) => {
-  const compte = comptePlateforme((req.session?.email || '').toLowerCase());
+/** Liste des comptes et de tous les evenements. Reserve aux administrateurs. */
+platformRouter.get('/admin', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const compte = await comptePlateforme((req.session?.email || '').toLowerCase());
 
-  if (compte?.role !== 'admin') {
-    return res.status(403).json({ error: 'Réservé aux administrateurs.', reason: 'forbidden' });
+    if (compte?.role !== 'admin') {
+      return res.status(403).json({ error: 'Réservé aux administrateurs.', reason: 'forbidden' });
+    }
+
+    res.json({
+      accounts: (await tousLesComptes()).map(versPublic),
+      events: (await tousLesEvenements()).map(versGestion),
+    });
+  } catch (error) {
+    repondreErreur(res, error);
   }
-
-  res.json({
-    registry: etatRegistre(),
-    accounts: tousLesComptes().map(versPublic),
-    events: tousLesEvenements().map(versGestion),
-  });
-});
-
-/** Relit le registre, apres une modification faite a la main. */
-platformRouter.post('/admin/reload', requireAuth, async (req: AuthedRequest, res) => {
-  const compte = comptePlateforme((req.session?.email || '').toLowerCase());
-
-  if (compte?.role !== 'admin') {
-    return res.status(403).json({ error: 'Réservé aux administrateurs.', reason: 'forbidden' });
-  }
-
-  const resultat = await chargerRegistre();
-  res.json({
-    ...resultat,
-    message: `${resultat.events} événement(s) et ${resultat.accounts} compte(s) relus.`,
-  });
 });
 
 export { versSlug };

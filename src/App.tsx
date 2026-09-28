@@ -14,6 +14,7 @@ import { FeedbackModal } from './components/FeedbackModal';
 import { SheetsSetupModal } from './components/SheetsSetupModal';
 import { ImportDataModal } from './components/ImportDataModal';
 import { LoginView } from './components/LoginView';
+import { Plateforme, adresseDemandeLaPlateforme } from './components/plateforme/Plateforme';
 import { Session } from './types';
 import { AppTab } from './permissions';
 import {
@@ -68,6 +69,15 @@ const AppContent: React.FC = () => {
   } = useEvent();
 
   const [feedbackSession, setFeedbackSession] = useState<Session | null>(null);
+
+  /*
+   * Faut-il montrer la plateforme ?
+   *
+   * Oui si l'adresse le demande, oui aussi quand le serveur ne sert aucun
+   * evenement en propre — une installation neuve n'a rien d'autre a montrer
+   * que son catalogue.
+   */
+  const [demandeLaPlateforme, setDemandeLaPlateforme] = useState(adresseDemandeLaPlateforme);
   const [warningDismissed, setWarningDismissed] = useState(false);
 
   const handleOpenFeedbackForSession = (session: Session) => {
@@ -84,11 +94,31 @@ const AppContent: React.FC = () => {
     );
   }
 
+  /*
+   * Deux applications cohabitent sous la meme adresse.
+   *
+   * La plateforme — vitrine, inscription, creation d'evenement — s'affiche
+   * quand l'adresse la demande, ou quand l'installation n'a pas d'evenement
+   * propre a servir. L'application d'un evenement s'affiche autrement.
+   *
+   * Cet ordre importe : une installation existante, adossee a son classeur,
+   * continue de s'ouvrir sur son evenement et non sur un catalogue. Personne
+   * ne doit decouvrir un matin que son application a change de nature.
+   */
+  if (demandeLaPlateforme) {
+    return (
+      <Plateforme
+        connecte={authStatus === 'authenticated'}
+        onConnexion={() => setDemandeLaPlateforme(false)}
+      />
+    );
+  }
+
   // Tant que personne n'est authentifie, seul l'ecran de connexion est accessible.
   // La configuration du classeur exige une session habilitee : le tout premier
   // acces passe par la variable ADMIN_EMAILS du serveur.
   if (authStatus === 'anonymous') {
-    return <LoginView />;
+    return <LoginView onPlateforme={() => setDemandeLaPlateforme(true)} />;
   }
 
   // Un onglet devenu interdit (changement de role en cours de session) retombe

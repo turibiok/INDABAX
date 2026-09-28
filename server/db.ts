@@ -12,9 +12,24 @@
  * ce code sans base, et de brancher la base ensuite.
  */
 
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow, types } from 'pg';
 
 import { SCHEMA_SQL } from './schema';
+
+/*
+ * Une colonne `date` est rendue telle qu'elle est ecrite, et non convertie.
+ *
+ * Par defaut, le pilote en fait un `Date` place a minuit dans le fuseau du
+ * serveur ; le ramener ensuite en texte par `toISOString` le repasse en UTC et
+ * recule d'un jour des que ce fuseau est a l'est de Greenwich. Une date
+ * d'evenement saisie au 1er mai s'affichait au 30 avril.
+ *
+ * Ces dates n'ont pas d'heure et ne designent pas un instant : « le 1er mai »
+ * veut dire la meme chose a Cotonou et a Francfort. Les laisser en texte est
+ * donc la lecture juste, pas seulement la plus commode.
+ */
+const OID_DATE = 1082;
+types.setTypeParser(OID_DATE, valeur => valeur);
 
 let pool: Pool | null = null;
 let pretParDefaut: Promise<void> | null = null;
