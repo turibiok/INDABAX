@@ -9,6 +9,7 @@ import { socialRouter } from "./server/routes/social";
 import { eventRouter } from "./server/routes/event";
 import { platformRouter } from "./server/routes/platform";
 import { ticketsRouter } from "./server/routes/tickets";
+import { paiementRouter } from "./server/routes/paiement";
 import { registreConfigure } from "./server/platform";
 import { amorcerPlateforme } from "./server/bootstrap";
 import { reloadEventConfig } from "./server/eventConfig";
@@ -36,7 +37,19 @@ const normalize = (value?: string) => (value || "").trim().toLowerCase();
 // L'application et son API partagent la meme origine : les cookies de session
 // suffisent, aucun en-tete CORS n'est ouvert.
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "20mb" }));
+/*
+ * La notification de paiement échappe à l'analyse JSON.
+ *
+ * Sa signature porte sur le texte exact envoyé par FedaPay. Le laisser
+ * analyser puis re-sérialiser en changerait les espaces et l'ordre des clés,
+ * donc l'empreinte : des notifications parfaitement authentiques seraient
+ * refusées, par intermittence et sans explication. La route lit le corps brut
+ * elle-même.
+ */
+app.use((req, res, next) => {
+  if (req.path === "/api/paiement/webhook") return next();
+  return express.json({ limit: "20mb" })(req, res, next);
+});
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -55,6 +68,7 @@ app.use("/api/social", socialRouter);
 app.use("/api/event", eventRouter);
 app.use("/api/platform", platformRouter);
 app.use("/api/billetterie", ticketsRouter);
+app.use("/api/paiement", paiementRouter);
 
 async function startServer() {
   await initStore();

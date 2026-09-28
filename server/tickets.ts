@@ -45,6 +45,8 @@ export interface Order {
   currency: string;
   paymentRef?: string;
   paymentMethod?: string;
+  /** Identifiant de la transaction chez le prestataire de paiement. */
+  paymentProviderId?: string;
   createdAt: string;
   paidAt?: string;
 }
@@ -316,6 +318,7 @@ function versCommande(l: Record<string, unknown>): Order {
     currency: String(l.currency),
     paymentRef: (l.payment_ref as string) || undefined,
     paymentMethod: (l.payment_method as string) || undefined,
+    paymentProviderId: (l.payment_provider_id as string) || undefined,
     createdAt: String(l.created_at),
     paidAt: l.paid_at ? String(l.paid_at) : undefined,
   };
@@ -368,6 +371,23 @@ export async function annulerCommande(orderId: string): Promise<Order> {
 
     return versCommande(r.rows[0]);
   });
+}
+
+/** Retient l'identifiant de transaction du prestataire pour une commande. */
+export async function attacherPaiement(orderId: string, transactionId: string): Promise<void> {
+  await query(`UPDATE orders SET payment_provider_id = $2 WHERE id = $1`, [orderId, transactionId]);
+}
+
+/** Retrouve une commande par l'identifiant que le prestataire lui connait. */
+export async function commandeParTransaction(transactionId: string): Promise<Order | undefined> {
+  const r = await query(`SELECT * FROM orders WHERE payment_provider_id = $1`, [transactionId]);
+  return r.rowCount ? versCommande(r.rows[0]) : undefined;
+}
+
+/** Une commande par son identifiant. */
+export async function commande(orderId: string): Promise<Order | undefined> {
+  const r = await query(`SELECT * FROM orders WHERE id = $1`, [orderId]);
+  return r.rowCount ? versCommande(r.rows[0]) : undefined;
 }
 
 /** Marque une commande comme payee. Appele apres confirmation du prestataire. */

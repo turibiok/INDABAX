@@ -92,11 +92,19 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Renseignes par le prestataire de paiement, quand il y en a un.
   payment_ref    TEXT,
   payment_method TEXT,
+  -- Identifiant FedaPay de la transaction. C'est par lui qu'une notification
+  -- retrouve sa commande : se fier a ce que le navigateur renvoie laisserait
+  -- n'importe qui declarer une commande payee.
+  payment_provider_id TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   paid_at        TIMESTAMPTZ
 );
 
+-- Ajoutee apres coup : une base deja en service ne se recree pas.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_provider_id TEXT;
+
 CREATE INDEX IF NOT EXISTS orders_event_idx ON orders(event_slug, status);
+CREATE INDEX IF NOT EXISTS orders_provider_idx ON orders(payment_provider_id);
 CREATE INDEX IF NOT EXISTS orders_buyer_idx ON orders(lower(buyer_email));
 
 -- Un billet nominatif, rattache a une commande.
