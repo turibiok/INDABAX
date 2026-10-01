@@ -81,6 +81,12 @@ export interface ComptePlateforme {
   name: string;
   role: 'admin' | 'organizer' | 'member';
   suspended: boolean;
+  /** Un administrateur a regardé ce compte. Sans cela, pas de publication. */
+  validated: boolean;
+  validatedBy?: string;
+  validatedAt?: string;
+  /** Mot de passe provisoire : il faut en choisir un autre. */
+  mustChangePassword: boolean;
 }
 
 export function evenementsPublies(): Promise<{ configured: boolean; events: EvenementPublic[] }> {
@@ -138,7 +144,7 @@ export function modifierEvenement(
 export function connexionPlateforme(
   email: string,
   password: string,
-): Promise<{ account: ComptePlateforme }> {
+): Promise<{ account: ComptePlateforme; mustChangePassword?: boolean }> {
   return appel('/api/platform/login', { method: 'POST', body: { email, password } });
 }
 
@@ -185,6 +191,45 @@ export function modifierCompte(
   return appel(`/api/platform/admin/accounts/${encodeURIComponent(email)}`, {
     method: 'PUT',
     body: patch,
+  });
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Validation et mots de passe
+ * ------------------------------------------------------------------ */
+
+export function validerCompte(
+  email: string,
+  validated: boolean,
+): Promise<{ account: ComptePlateforme; message: string }> {
+  return appel(`/api/platform/admin/accounts/${encodeURIComponent(email)}/validation`, {
+    method: 'PUT',
+    body: { validated },
+  });
+}
+
+/**
+ * Émet un mot de passe provisoire pour quelqu'un.
+ *
+ * Le mot de passe revient dans la réponse et n'est plus jamais consultable :
+ * l'écran doit donc l'afficher jusqu'à ce qu'on le ferme.
+ */
+export function depannerMotDePasse(
+  email: string,
+): Promise<{ temporaryPassword: string; message: string }> {
+  return appel(`/api/platform/admin/accounts/${encodeURIComponent(email)}/password`, {
+    method: 'POST',
+  });
+}
+
+export function changerMonMotDePasse(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: boolean; message: string }> {
+  return appel('/api/platform/password', {
+    method: 'PUT',
+    body: { currentPassword, newPassword },
   });
 }
 

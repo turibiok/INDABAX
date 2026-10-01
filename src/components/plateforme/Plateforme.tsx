@@ -1,8 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+
+import { ComptePlateforme, mesEvenements } from '../../services/plateforme';
 
 import { ConnexionPlateforme } from './ConnexionPlateforme';
 import { CreerEvenement } from './CreerEvenement';
 import { MesEvenements } from './MesEvenements';
+import { MonCompte } from './MonCompte';
 import { PageEvenement } from './PageEvenement';
 import { TableauDeBord } from './TableauDeBord';
 import { Vitrine } from './Vitrine';
@@ -33,7 +37,8 @@ type Vue =
   | { nom: 'mes-evenements' }
   | { nom: 'creation' }
   | { nom: 'plateforme' }
-  | { nom: 'connexion' };
+  | { nom: 'connexion' }
+  | { nom: 'mon-compte' };
 
 /** Lit la vue depuis l'adresse. */
 function vueDepuisAdresse(): Vue {
@@ -47,6 +52,7 @@ function vueDepuisAdresse(): Vue {
   if (espace === 'creation') return { nom: 'creation' };
   if (espace === 'plateforme') return { nom: 'plateforme' };
   if (espace === 'connexion') return { nom: 'connexion' };
+  if (espace === 'mon-compte') return { nom: 'mon-compte' };
 
   return { nom: 'vitrine' };
 }
@@ -63,6 +69,7 @@ function poserAdresse(vue: Vue) {
   if (vue.nom === 'creation') params.set('espace', 'creation');
   if (vue.nom === 'plateforme') params.set('espace', 'plateforme');
   if (vue.nom === 'connexion') params.set('espace', 'connexion');
+  if (vue.nom === 'mon-compte') params.set('espace', 'mon-compte');
 
   const suite = params.toString();
   window.history.pushState({}, '', suite ? `?${suite}` : window.location.pathname);
@@ -70,6 +77,21 @@ function poserAdresse(vue: Vue) {
 
 export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion }) => {
   const [vue, setVue] = useState<Vue>(vueDepuisAdresse);
+  const [monCompte, setMonCompte] = useState<ComptePlateforme | null>(null);
+
+  /** Relit le compte courant — après un changement de mot de passe, par exemple. */
+  const relireCompte = useCallback(() => {
+    if (!connecte) {
+      setMonCompte(null);
+      return;
+    }
+
+    mesEvenements()
+      .then(r => setMonCompte(r.account))
+      .catch(() => setMonCompte(null));
+  }, [connecte]);
+
+  useEffect(relireCompte, [relireCompte]);
 
   const aller = useCallback((suivante: Vue) => {
     poserAdresse(suivante);
@@ -92,12 +114,26 @@ export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion })
    */
   useEffect(() => {
     const reservee =
-      vue.nom === 'mes-evenements' || vue.nom === 'creation' || vue.nom === 'plateforme';
+      vue.nom === 'mes-evenements' ||
+      vue.nom === 'creation' ||
+      vue.nom === 'plateforme' ||
+      vue.nom === 'mon-compte';
 
     if (!connecte && reservee) {
       aller({ nom: 'vitrine' });
     }
   }, [connecte, vue, aller]);
+
+  /*
+   * Un mot de passe provisoire barre tout le reste.
+   *
+   * Quelqu'un d'autre le connait — un administrateur vient de le dicter. Le
+   * laisser servir le temps qu'on y pense reviendrait a annuler l'interet du
+   * provisoire.
+   */
+  if (connecte && monCompte?.mustChangePassword) {
+    return <MonCompte compte={monCompte} onRetour={() => undefined} onChange={relireCompte} impose />;
+  }
 
   if (vue.nom === 'connexion') {
     return (
@@ -129,6 +165,24 @@ export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion })
     );
   }
 
+  if (vue.nom === 'mon-compte') {
+    if (!monCompte) {
+      return (
+        <div className="min-h-screen bg-[#FDFCFB] dark:bg-stone-950 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-stone-400" />
+        </div>
+      );
+    }
+
+    return (
+      <MonCompte
+        compte={monCompte}
+        onRetour={() => aller({ nom: 'mes-evenements' })}
+        onChange={relireCompte}
+      />
+    );
+  }
+
   if (vue.nom === 'plateforme') {
     return <TableauDeBord onRetour={() => aller({ nom: 'mes-evenements' })} />;
   }
@@ -140,6 +194,7 @@ export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion })
         onOuvrir={slug => aller({ nom: 'evenement', slug })}
         onVitrine={() => aller({ nom: 'vitrine' })}
         onPlateforme={() => aller({ nom: 'plateforme' })}
+        onMonCompte={() => aller({ nom: 'mon-compte' })}
       />
     );
   }

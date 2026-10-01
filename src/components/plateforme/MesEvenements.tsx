@@ -24,6 +24,8 @@ interface MesEvenementsProps {
   onVitrine: () => void;
   /** Ouvre le tableau de bord. Proposé aux seuls administrateurs. */
   onPlateforme: () => void;
+  /** Ouvre l'espace personnel : état du compte et mot de passe. */
+  onMonCompte: () => void;
 }
 
 const ETIQUETTE_STATUT: Record<EvenementGere['status'], string> = {
@@ -37,6 +39,7 @@ export const MesEvenements: React.FC<MesEvenementsProps> = ({
   onOuvrir,
   onVitrine,
   onPlateforme,
+  onMonCompte,
 }) => {
   const [compte, setCompte] = useState<ComptePlateforme | null>(null);
   const [evenements, setEvenements] = useState<EvenementGere[]>([]);
@@ -87,9 +90,12 @@ export const MesEvenements: React.FC<MesEvenementsProps> = ({
 
           <div className="flex items-center gap-3">
             {compte && (
-              <span className="text-xs text-stone-500">
+              <button
+                onClick={onMonCompte}
+                title="Mon compte et mon mot de passe"
+                className="text-xs text-stone-500 hover:text-emerald-700 cursor-pointer underline underline-offset-2">
                 {compte.name} · {compte.role === 'admin' ? 'administrateur' : compte.role === 'organizer' ? 'organisateur' : 'membre'}
-              </span>
+              </button>
             )}
 
             {/*
@@ -119,6 +125,13 @@ export const MesEvenements: React.FC<MesEvenementsProps> = ({
 
       <main className="max-w-5xl mx-auto px-4 py-8">
         {chargement && <Loader2 className="w-5 h-5 animate-spin text-stone-400" />}
+
+        {compte && compte.role !== 'member' && !compte.validated && (
+          <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-sm font-semibold text-amber-900 dark:text-amber-200">
+            Votre compte attend la validation d’un administrateur. Vous pouvez préparer vos
+            événements ; leur publication sera possible une fois le compte validé.
+          </div>
+        )}
 
         {erreur && (
           <div className="mb-5 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-800 dark:text-red-300 text-sm font-semibold">

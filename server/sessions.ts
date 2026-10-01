@@ -70,13 +70,13 @@ function newSessionId(): string {
   return crypto.randomBytes(32).toString('base64url');
 }
 
-export function createSession(input: {
+export async function createSession(input: {
   email: string;
   name: string;
   role: ParticipantRole;
   status: AccountStatus;
   source: ServerSession['source'];
-}): ServerSession {
+}): Promise<ServerSession> {
   const now = Date.now();
 
   const session: ServerSession = {
@@ -91,12 +91,18 @@ export function createSession(input: {
     expiresAt: now + SESSION_TTL_MS,
   };
 
-  // L'ecriture est lancee sans etre attendue : la session est deja utilisable,
-  // et faire patienter la reponse de connexion sur un aller-retour vers la
-  // base n'apporterait rien. Un echec est signale, pas tu.
-  void enregistrerSession(session).catch(erreur =>
-    console.warn(`Session non enregistrée : ${(erreur as Error)?.message || erreur}`),
-  );
+  /*
+   * L'ecriture est attendue, et c'est indispensable.
+   *
+   * Elle ne l'etait pas : la session etait rendue avant d'etre enregistree, au
+   * motif qu'elle etait deja utilisable. Elle ne l'etait pas — la requete
+   * suivante part aussitot, et la lecture en base arrivait avant l'ecriture.
+   * On se connectait donc avec succes pour etre refuse dans la foulee, d'autant
+   * plus surement que la base est lointaine.
+   *
+   * Le cout est un aller-retour sur la seule connexion. Il est du.
+   */
+  await enregistrerSession(session);
   return session;
 }
 

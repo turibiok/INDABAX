@@ -233,7 +233,7 @@ authRouter.post('/login', async (req, res) => {
       });
     }
 
-    const session = createSession({
+    const session = await createSession({
       email: account.email,
       name: account.name,
       role: account.role,
@@ -421,7 +421,7 @@ authRouter.post('/register', async (req: AuthedRequest, res) => {
   // retour, la personne devrait se reinscrire a chaque reveil du service.
   const { warning } = await rememberHashInSheet(email, hash);
 
-  const session = createSession({
+  const session = await createSession({
     email,
     name: account.name,
     role: account.role,

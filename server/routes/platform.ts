@@ -404,7 +404,7 @@ platformRouter.post('/login', async (req, res) => {
    * quelqu'un d'autre, et les routes de plateforme relisent le role reel a
    * chaque appel.
    */
-  const session = createSession({
+  const session = await createSession({
     email: compte.email,
     name: compte.name,
     role: 'attendee',

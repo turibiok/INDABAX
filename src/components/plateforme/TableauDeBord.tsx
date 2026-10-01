@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  KeyRound,
   Loader2,
   RefreshCw,
   Ticket,
@@ -12,11 +13,13 @@ import {
 
 import {
   ComptePlateforme,
+  depannerMotDePasse,
   EvenementGere,
   chiffresPlateforme,
   modifierCompte,
   StatistiquesPlateforme,
   tableauDeBord,
+  validerCompte,
 } from '../../services/plateforme';
 import { prix } from '../../services/plateforme';
 
@@ -66,6 +69,15 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({ onRetour }) => {
   const [succes, setSucces] = useState<string | null>(null);
   const [enCours, setEnCours] = useState<string | null>(null);
 
+  /**
+   * Le mot de passe provisoire qui vient d'etre emis.
+   *
+   * Garde a l'ecran jusqu'a ce qu'on le ferme : le serveur ne le conserve pas
+   * en clair, et il ne sera plus jamais consultable. Le faire disparaitre tout
+   * seul obligerait a en emettre un autre.
+   */
+  const [provisoire, setProvisoire] = useState<{ email: string; motDePasse: string } | null>(null);
+
   const charger = useCallback(async () => {
     setChargement(true);
     setErreur(null);
@@ -110,6 +122,45 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({ onRetour }) => {
     }
   };
 
+  const basculerValidation = async (compte: ComptePlateforme) => {
+    setEnCours(compte.email);
+    setErreur(null);
+    setSucces(null);
+
+    try {
+      const r = await validerCompte(compte.email, !compte.validated);
+      setComptes(prev => prev.map(c => (c.email === r.account.email ? r.account : c)));
+      setSucces(r.message);
+      setTimeout(() => setSucces(null), 3000);
+    } catch (e: any) {
+      setErreur(e?.message || "Le changement n'a pas abouti.");
+    } finally {
+      setEnCours(null);
+    }
+  };
+
+  const depanner = async (compte: ComptePlateforme) => {
+    setEnCours(compte.email);
+    setErreur(null);
+    setSucces(null);
+
+    try {
+      const r = await depannerMotDePasse(compte.email);
+      setProvisoire({ email: compte.email, motDePasse: r.temporaryPassword });
+      // Les sessions de cette personne sont tombees : l'etat affiche doit
+      // refleter qu'elle devra changer de mot de passe.
+      setComptes(prev =>
+        prev.map(c => (c.email === compte.email ? { ...c, mustChangePassword: true } : c)),
+      );
+    } catch (e: any) {
+      setErreur(e?.message || "Le dépannage n'a pas abouti.");
+    } finally {
+      setEnCours(null);
+    }
+  };
+
+  const enAttente = comptes.filter(c => !c.validated && !c.suspended);
+
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-stone-950 text-stone-900 dark:text-stone-100">
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -141,6 +192,28 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({ onRetour }) => {
           <div className="mt-5 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-800 dark:text-red-300 text-sm font-semibold flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             {erreur}
+          </div>
+        )}
+
+        {provisoire && (
+          <div className="mt-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+            <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
+              Mot de passe provisoire pour {provisoire.email}
+            </p>
+            <p className="font-mono font-black text-2xl tracking-wider mt-2">
+              {provisoire.motDePasse}
+            </p>
+            <p className="text-xs text-amber-900/80 dark:text-amber-200/80 mt-2">
+              Transmettez-le de vive voix. Il n’est affiché qu’une fois — le serveur ne le
+              conserve pas en clair — et la personne devra en choisir un autre à sa prochaine
+              connexion.
+            </p>
+            <button
+              onClick={() => setProvisoire(null)}
+              className="mt-3 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-bold cursor-pointer"
+            >
+              J’ai noté
+            </button>
           </div>
         )}
 
@@ -198,6 +271,49 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({ onRetour }) => {
           </>
         )}
 
+        {enAttente.length > 0 && (
+          <>
+            <h2 className="font-heading font-black text-lg mt-9 mb-1">
+              En attente de validation ({enAttente.length})
+            </h2>
+            {/*
+              * Mise en tete parce que c'est la seule chose qui attend quelqu'un :
+              * tant qu'un compte n'est pas validé, son organisateur ne peut rien
+              * publier, et il n'a aucun moyen de le savoir sinon en essayant.
+              */}
+            <p className="text-xs text-stone-500 mb-3">
+              Ces comptes peuvent préparer un événement, pas le publier.
+            </p>
+
+            <div className="space-y-2">
+              {enAttente.map(compte => (
+                <div
+                  key={compte.email}
+                  className="border border-amber-300 dark:border-amber-900 bg-amber-500/5 rounded-2xl p-3 flex items-center gap-3 flex-wrap"
+                >
+                  <div className="flex-1 min-w-[180px]">
+                    <p className="font-bold text-sm">{compte.name}</p>
+                    <p className="text-xs text-stone-500">{compte.email}</p>
+                  </div>
+
+                  <button
+                    onClick={() => basculerValidation(compte)}
+                    disabled={enCours === compte.email}
+                    className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                  >
+                    {enCours === compte.email ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    )}
+                    Valider
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         <h2 className="font-heading font-black text-lg mt-9 mb-3">Comptes</h2>
 
         <div className="space-y-2">
@@ -209,7 +325,32 @@ export const TableauDeBord: React.FC<TableauDeBordProps> = ({ onRetour }) => {
               <div className="flex-1 min-w-[180px]">
                 <p className="font-bold text-sm">{compte.name}</p>
                 <p className="text-xs text-stone-500">{compte.email}</p>
+                <p className="text-[11px] mt-0.5 flex items-center gap-2 flex-wrap">
+                  <span className={compte.validated ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}>
+                    {compte.validated ? 'validé' : 'en attente'}
+                  </span>
+                  {compte.mustChangePassword && (
+                    <span className="text-amber-700 dark:text-amber-400">mot de passe provisoire</span>
+                  )}
+                </p>
               </div>
+
+              <button
+                onClick={() => basculerValidation(compte)}
+                disabled={enCours === compte.email}
+                className="px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 text-xs font-bold disabled:opacity-40 cursor-pointer"
+              >
+                {compte.validated ? 'Retirer la validation' : 'Valider'}
+              </button>
+
+              <button
+                onClick={() => depanner(compte)}
+                disabled={enCours === compte.email}
+                title="Émet un mot de passe provisoire et ferme les sessions ouvertes de cette personne"
+                className="px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 text-xs font-bold flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5" /> Dépanner
+              </button>
 
               <select
                 value={compte.role}
