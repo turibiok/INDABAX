@@ -50,8 +50,13 @@ async function amorcerAdmin(messages: string[]): Promise<string | undefined> {
   }
 
   await query(
-    `INSERT INTO platform_accounts (email, name, role, password_hash)
-     VALUES ($1, $2, 'admin', $3)
+    /*
+     * Valide des sa creation : c'est le compte qui validera les autres, et le
+     * faire naitre en attente enfermerait la plateforme — personne ne pourrait
+     * valider personne.
+     */
+    `INSERT INTO platform_accounts (email, name, role, password_hash, validated, validated_by, validated_at)
+     VALUES ($1, $2, 'admin', $3, TRUE, 'amorçage', now())
      ON CONFLICT (email) DO NOTHING`,
     [
       email,

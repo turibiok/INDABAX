@@ -12,6 +12,7 @@
 
 import { fermerBase, preparerBase, query } from './db';
 import {
+  composerCompte,
   comptePlateforme,
   enregistrerCompte,
   enregistrerEvenement,
@@ -104,14 +105,14 @@ async function main() {
 
   console.log('\n--- comptes ---');
 
-  await enregistrerCompte({
+  await enregistrerCompte(composerCompte({
     email: `Alice@${P}.INVALID`,
     name: 'Alice',
     role: 'organizer',
     passwordHash: 'scrypt$aaa$bbb',
     createdAt: new Date().toISOString(),
     suspended: false,
-  });
+  }));
 
   const alice = await comptePlateforme(`alice@${P}.invalid`);
   check("l'email est normalisé à l'écriture", alice?.email, `alice@${P}.invalid`);
@@ -125,13 +126,13 @@ async function main() {
   {
     // Renommer un compte ne doit pas effacer son mot de passe : l'ecran qui
     // change le nom n'a aucune raison de connaitre l'empreinte.
-    await enregistrerCompte({
+    await enregistrerCompte(composerCompte({
       email: `alice@${P}.invalid`,
       name: 'Alice Modifiée',
       role: 'organizer',
       createdAt: new Date().toISOString(),
       suspended: false,
-    });
+    }));
 
     const apres = await comptePlateforme(`alice@${P}.invalid`);
     check('le nom change', apres?.name, 'Alice Modifiée');
@@ -140,13 +141,13 @@ async function main() {
 
   console.log('\n--- événements ---');
 
-  await enregistrerCompte({
+  await enregistrerCompte(composerCompte({
     email: `bob@${P}.invalid`,
     name: 'Bob',
     role: 'organizer',
     createdAt: new Date().toISOString(),
     suspended: false,
-  });
+  }));
 
   await enregistrerEvenement(
     evenement({ slug: `${P}-forum`, name: 'Forum', ownerEmail: `alice@${P}.invalid`, status: 'published' }),

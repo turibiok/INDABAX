@@ -15,7 +15,7 @@
  * structure plutot qu'a la rigueur de chaque requete.
  */
 
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 
 import { baseConfiguree, DbError, query } from './db';
 
@@ -41,6 +41,18 @@ export interface PlatformAccount {
   passwordHash?: string;
   createdAt: string;
   suspended: boolean;
+  /**
+   * Un administrateur a regarde ce compte.
+   *
+   * L'inscription est ouverte, mais publier un evenement sous le nom de la
+   * plateforme ne l'est pas : tant que ce drapeau est faux, le compte existe
+   * et peut se connecter, sans pouvoir rien publier.
+   */
+  validated: boolean;
+  validatedBy?: string;
+  validatedAt?: string;
+  /** Mot de passe provisoire : il faudra en choisir un autre a la connexion. */
+  mustChangePassword: boolean;
 }
 
 export interface EventRecord {
@@ -106,6 +118,21 @@ export async function slugDisponible(nom: string, edition: string): Promise<stri
  * Conversion
  * ------------------------------------------------------------------ */
 
+/**
+ * Un horodatage de PostgreSQL, ramene au format ISO 8601.
+ *
+ * Le pilote rend un `timestamptz` sous forme de `Date`. Le passer par `String`
+ * produit la forme locale — « Thu Oct 01 2026 21:25:30 GMT+0100 (heure
+ * d'Afrique de l'Ouest) » — que PostgreSQL refuse ensuite en ecriture. Une
+ * valeur relue puis reecrite faisait donc echouer la requete, et seulement
+ * celle-la : le defaut ne se voyait qu'a l'aller-retour.
+ */
+function versInstant(valeur: unknown): string {
+  if (!valeur) return '';
+  if (valeur instanceof Date) return valeur.toISOString();
+  return String(valeur);
+}
+
 /** Une date de PostgreSQL, ramenee a « AAAA-MM-JJ » ou a rien. */
 function versJour(valeur: unknown): string {
   if (!valeur) return '';
@@ -129,8 +156,8 @@ function versEvenement(l: Record<string, unknown>): EventRecord {
     logoUrl: String(l.logo_url || ''),
     posterUrl: String(l.poster_url || ''),
     primaryColor: String(l.primary_color || '#047857'),
-    createdAt: String(l.created_at),
-    updatedAt: String(l.updated_at),
+    createdAt: versInstant(l.created_at),
+    updatedAt: versInstant(l.updated_at),
   };
 }
 
@@ -140,8 +167,12 @@ function versCompte(l: Record<string, unknown>): PlatformAccount {
     name: String(l.name || ''),
     role: String(l.role) as PlatformRole,
     passwordHash: (l.password_hash as string) || undefined,
-    createdAt: String(l.created_at),
+    createdAt: versInstant(l.created_at),
     suspended: Boolean(l.suspended),
+    validated: Boolean(l.validated),
+    validatedBy: (l.validated_by as string) || undefined,
+    validatedAt: l.validated_at ? versInstant(l.validated_at) : undefined,
+    mustChangePassword: Boolean(l.must_change_password),
   };
 }
 
@@ -190,6 +221,42 @@ export async function comptePlateforme(email: string): Promise<PlatformAccount |
 export async function tousLesComptes(): Promise<PlatformAccount[]> {
   const r = await query(`SELECT * FROM platform_accounts ORDER BY created_at`);
   return r.rows.map(versCompte);
+}
+
+/**
+ * Un mot de passe provisoire, lisible a voix haute.
+ *
+ * Sans I, O, 0 ni 1, qui se confondent quand on le dicte au telephone — et
+ * c'est bien ainsi qu'il circulera. Douze caracteres tires au hasard
+ * cryptographique : assez pour qu'il ne se devine pas le temps qu'il serve.
+ */
+export function motDePasseProvisoire(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const octets = randomBytes(12);
+
+  let mot = '';
+  for (const octet of octets) mot += alphabet[octet % alphabet.length];
+
+  return `${mot.slice(0, 4)}-${mot.slice(4, 8)}-${mot.slice(8)}`;
+}
+
+/**
+ * Un compte complet a partir de ce qu'on en sait.
+ *
+ * Les valeurs par defaut sont les plus restreintes : un compte nait membre,
+ * non valide, et sans mot de passe provisoire. Oublier un champ donne ainsi
+ * moins de droits, jamais plus.
+ */
+export function composerCompte(partiel: Partial<PlatformAccount> & { email: string }): PlatformAccount {
+  return {
+    name: partiel.email.split('@')[0],
+    role: 'member',
+    createdAt: new Date().toISOString(),
+    suspended: false,
+    validated: false,
+    mustChangePassword: false,
+    ...partiel,
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -249,15 +316,32 @@ export async function enregistrerCompte(compte: PlatformAccount): Promise<Platfo
   }
 
   const r = await query(
-    `INSERT INTO platform_accounts (email, name, role, password_hash, suspended)
-     VALUES (lower($1), $2, $3, $4, $5)
+    `INSERT INTO platform_accounts
+       (email, name, role, password_hash, suspended, validated, validated_by, validated_at, must_change_password)
+     VALUES (lower($1), $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (email) DO UPDATE SET
        name = EXCLUDED.name,
        role = EXCLUDED.role,
+       -- Une empreinte absente conserve celle en place : l'ecran qui change un
+       -- nom n'a aucune raison de connaitre le mot de passe.
        password_hash = COALESCE(EXCLUDED.password_hash, platform_accounts.password_hash),
-       suspended = EXCLUDED.suspended
+       suspended = EXCLUDED.suspended,
+       validated = EXCLUDED.validated,
+       validated_by = EXCLUDED.validated_by,
+       validated_at = EXCLUDED.validated_at,
+       must_change_password = EXCLUDED.must_change_password
      RETURNING *`,
-    [compte.email, compte.name, compte.role, compte.passwordHash || null, compte.suspended],
+    [
+      compte.email,
+      compte.name,
+      compte.role,
+      compte.passwordHash || null,
+      compte.suspended,
+      compte.validated,
+      compte.validatedBy || null,
+      compte.validatedAt || null,
+      compte.mustChangePassword,
+    ],
   );
 
   return versCompte(r.rows[0]);

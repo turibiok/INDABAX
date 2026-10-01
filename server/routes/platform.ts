@@ -1,7 +1,9 @@
 import { Router } from 'express';
 
 import {
+  composerCompte,
   comptePlateforme,
+  motDePasseProvisoire,
   enregistrerCompte,
   enregistrerEvenement,
   EventRecord,
@@ -21,6 +23,7 @@ import {
   AuthedRequest,
   createSession,
   requireAuth,
+  revokeSessionsForEmail,
   setSessionCookie,
   toClientSession,
 } from '../sessions';
@@ -78,8 +81,18 @@ function versGestion(e: EventRecord) {
 }
 
 /** Le compte, sans jamais son empreinte. */
+/** Le compte, sans jamais son empreinte. */
 function versPublic(c: PlatformAccount) {
-  return { email: c.email, name: c.name, role: c.role, suspended: Boolean(c.suspended) };
+  return {
+    email: c.email,
+    name: c.name,
+    role: c.role,
+    suspended: Boolean(c.suspended),
+    validated: Boolean(c.validated),
+    validatedBy: c.validatedBy,
+    validatedAt: c.validatedAt,
+    mustChangePassword: Boolean(c.mustChangePassword),
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -189,6 +202,14 @@ platformRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
     });
   }
 
+  /*
+   * Un compte non valide prepare son evenement mais ne le publie pas. Le
+   * refuser ici plutot qu'a la publication lui eviterait de tout saisir pour
+   * rien ; l'inverse — laisser creer et bloquer a la publication — permet au
+   * contraire de travailler pendant que la validation arrive. C'est ce second
+   * choix qui est retenu, et la restriction porte donc sur le statut.
+   */
+
   const corps = (req.body || {}) as CorpsEvenement;
   const manques = valider(corps);
 
@@ -259,6 +280,21 @@ platformRouter.put('/events/:slug', requireAuth, async (req: AuthedRequest, res)
   const statut = (corps.status || '').trim();
   const statutValide = ['draft', 'published', 'archived'].includes(statut);
 
+  /*
+   * La publication demande un compte valide. Un administrateur en est
+   * dispense : c'est lui qui valide, et le lui interdire enfermerait la
+   * plateforme le jour ou le premier compte n'a encore ete valide par
+   * personne.
+   */
+  if (statut === 'published' && compte?.role !== 'admin' && !compte?.validated) {
+    return res.status(403).json({
+      error:
+        "Votre compte n'est pas encore validé : vous pouvez préparer l'événement, " +
+        'mais sa publication attend l’accord d’un administrateur.',
+      reason: 'not_validated',
+    });
+  }
+
   const modifie: EventRecord = {
     ...existant,
     name: corps.name !== undefined ? corps.name.trim() : existant.name,
@@ -322,14 +358,14 @@ platformRouter.post('/register', async (req, res) => {
   if (await comptePlateforme(email)) return res.json(neutre);
 
   try {
-    await enregistrerCompte({
+    await enregistrerCompte(composerCompte({
       email,
       name: nom || email.split('@')[0],
       role: 'organizer',
       passwordHash: await hashPassword(motDePasse),
       createdAt: new Date().toISOString(),
       suspended: false,
-    });
+    }));
 
     res.json(neutre);
   } catch (error) {
@@ -378,7 +414,12 @@ platformRouter.post('/login', async (req, res) => {
 
   setSessionCookie(res, session);
 
-  res.json({ account: versPublic(compte), session: toClientSession(session) });
+  res.json({
+    account: versPublic(compte),
+    session: toClientSession(session),
+    // Dit a l'interface d'exiger un nouveau mot de passe avant tout le reste.
+    mustChangePassword: compte.mustChangePassword,
+  });
 });
 
 /* ------------------------------------------------------------------ *
@@ -468,13 +509,164 @@ platformRouter.put('/admin/accounts/:email', requireAuth, async (req: AuthedRequ
       }
     }
 
-    const enregistre = await enregistrerCompte({
+    const enregistre = await enregistrerCompte(composerCompte({
       ...cible,
       role: role as PlatformRole,
       suspended: suspendu,
-    });
+    }));
 
     res.json({ account: versPublic(enregistre), message: 'Compte mis à jour.' });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * Validation des comptes
+ * ------------------------------------------------------------------ */
+
+/**
+ * Valide ou retire la validation d'un compte.
+ *
+ * L'inscription est ouverte, mais publier sous le nom de la plateforme ne
+ * l'est pas : un compte non valide se connecte et prepare son evenement, sans
+ * pouvoir le publier. Qui a valide et quand sont conserves — une decision
+ * d'acces sans trace est une decision que personne ne saura expliquer plus
+ * tard.
+ */
+platformRouter.put('/admin/accounts/:email/validation', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const moi = (req.session?.email || '').toLowerCase();
+    const administrateur = await comptePlateforme(moi);
+
+    if (administrateur?.role !== 'admin') {
+      return res.status(403).json({ error: 'Réservé aux administrateurs.', reason: 'forbidden' });
+    }
+
+    const cible = await comptePlateforme(req.params.email);
+    if (!cible) {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
+
+    const valide = (req.body || {}).validated !== false;
+
+    const enregistre = await enregistrerCompte({
+      ...cible,
+      validated: valide,
+      validatedBy: valide ? moi : undefined,
+      validatedAt: valide ? new Date().toISOString() : undefined,
+    });
+
+    res.json({
+      account: versPublic(enregistre),
+      message: valide ? 'Compte validé.' : 'Validation retirée.',
+    });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * Mots de passe
+ * ------------------------------------------------------------------ */
+
+/**
+ * Chacun change le sien.
+ *
+ * L'ancien mot de passe est exige meme si la session est valable : un poste
+ * laisse ouvert ne doit pas suffire a s'approprier le compte definitivement.
+ */
+platformRouter.put('/password', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const email = (req.session?.email || '').toLowerCase();
+    const cible = await comptePlateforme(email);
+
+    if (!cible) {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
+
+    const corps = req.body || {};
+    const ancien = String(corps.currentPassword || '');
+    const nouveau = String(corps.newPassword || '');
+
+    if (nouveau.length < 8) {
+      return res.status(400).json({
+        error: 'Le nouveau mot de passe doit faire 8 caractères au moins.',
+        reason: 'too_short',
+      });
+    }
+
+    /*
+     * Un mot de passe provisoire se remplace sans connaitre l'ancien : la
+     * personne vient justement de le recevoir d'un administrateur, et
+     * l'exiger reviendrait a lui demander de retaper ce qu'on vient de lui
+     * dicter.
+     */
+    if (!cible.mustChangePassword) {
+      if (!cible.passwordHash || !(await verifyPassword(ancien, cible.passwordHash))) {
+        return res.status(401).json({ error: 'Mot de passe actuel incorrect.', reason: 'bad_password' });
+      }
+    }
+
+    if (nouveau === ancien) {
+      return res.status(400).json({
+        error: 'Le nouveau mot de passe doit différer de l’ancien.',
+        reason: 'unchanged',
+      });
+    }
+
+    await enregistrerCompte({
+      ...cible,
+      passwordHash: await hashPassword(nouveau),
+      mustChangePassword: false,
+    });
+
+    res.json({ ok: true, message: 'Mot de passe changé.' });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
+});
+
+/**
+ * Un administrateur depanne quelqu'un.
+ *
+ * Le mot de passe est engendre par le serveur et montre une seule fois : ainsi
+ * l'administrateur ne choisit pas — donc ne devine pas — le mot de passe de
+ * quelqu'un, et le compte devra en prendre un autre a la connexion suivante.
+ * Il ne connait donc jamais le mot de passe durable d'un tiers.
+ */
+platformRouter.post('/admin/accounts/:email/password', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const moi = (req.session?.email || '').toLowerCase();
+    const administrateur = await comptePlateforme(moi);
+
+    if (administrateur?.role !== 'admin') {
+      return res.status(403).json({ error: 'Réservé aux administrateurs.', reason: 'forbidden' });
+    }
+
+    const cible = await comptePlateforme(req.params.email);
+    if (!cible) {
+      return res.status(404).json({ error: 'Compte introuvable.', reason: 'not_found' });
+    }
+
+    const provisoire = motDePasseProvisoire();
+
+    await enregistrerCompte({
+      ...cible,
+      passwordHash: await hashPassword(provisoire),
+      mustChangePassword: true,
+    });
+
+    // Les sessions ouvertes de cette personne tombent : un mot de passe remis
+    // a zero doit interrompre un acces en cours, pas seulement le suivant.
+    await revokeSessionsForEmail(cible.email);
+
+    res.json({
+      temporaryPassword: provisoire,
+      message:
+        'Mot de passe provisoire créé. Transmettez-le de vive voix : il n’est affiché qu’une fois, ' +
+        'et la personne devra en choisir un autre.',
+    });
   } catch (error) {
     repondreErreur(res, error);
   }

@@ -170,4 +170,25 @@ CREATE TABLE IF NOT EXISTS reset_tokens (
 
 CREATE INDEX IF NOT EXISTS reset_tokens_email_idx ON reset_tokens(lower(email));
 CREATE INDEX IF NOT EXISTS reset_tokens_expiry_idx ON reset_tokens(expires_at);
+
+-- Validation des comptes.
+--
+-- L'inscription reste ouverte : n'importe qui cree un compte. Mais creer un
+-- compte et publier un evenement sous le nom de la plateforme sont deux choses
+-- differentes, et la seconde demande qu'un administrateur ait regarde.
+ALTER TABLE platform_accounts ADD COLUMN IF NOT EXISTS validated BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Qui a valide, et quand. Une decision d'acces sans trace est une decision que
+-- personne ne saura expliquer six mois plus tard.
+ALTER TABLE platform_accounts ADD COLUMN IF NOT EXISTS validated_by TEXT;
+ALTER TABLE platform_accounts ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ;
+
+-- Le compte doit choisir un nouveau mot de passe a sa prochaine connexion.
+--
+-- Sert aux mots de passe provisoires : un administrateur qui depanne quelqu'un
+-- lui en donne un pour une fois, et ne connait pas celui qui suivra.
+ALTER TABLE platform_accounts ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS platform_accounts_attente_idx
+  ON platform_accounts(validated) WHERE validated = FALSE;
 `;

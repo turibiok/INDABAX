@@ -306,6 +306,21 @@ export async function passerCommande(input: {
   });
 }
 
+/**
+ * Un horodatage de PostgreSQL, ramene au format ISO 8601.
+ *
+ * Le pilote rend un `timestamptz` sous forme de `Date`. Le passer par `String`
+ * produit la forme locale — « Thu Oct 01 2026 21:25:30 GMT+0100 (heure
+ * d'Afrique de l'Ouest) » — que PostgreSQL refuse ensuite en ecriture. Une
+ * valeur relue puis reecrite faisait donc echouer la requete, et seulement
+ * celle-la : le defaut ne se voyait qu'a l'aller-retour.
+ */
+function versInstant(valeur: unknown): string {
+  if (!valeur) return '';
+  if (valeur instanceof Date) return valeur.toISOString();
+  return String(valeur);
+}
+
 function versCommande(l: Record<string, unknown>): Order {
   return {
     id: String(l.id),
@@ -319,8 +334,8 @@ function versCommande(l: Record<string, unknown>): Order {
     paymentRef: (l.payment_ref as string) || undefined,
     paymentMethod: (l.payment_method as string) || undefined,
     paymentProviderId: (l.payment_provider_id as string) || undefined,
-    createdAt: String(l.created_at),
-    paidAt: l.paid_at ? String(l.paid_at) : undefined,
+    createdAt: versInstant(l.created_at),
+    paidAt: l.paid_at ? versInstant(l.paid_at) : undefined,
   };
 }
 
@@ -457,7 +472,7 @@ function versBillet(l: Record<string, unknown>): Ticket {
     holderName: String(l.holder_name || ''),
     holderEmail: String(l.holder_email || ''),
     status: String(l.status) as TicketStatus,
-    usedAt: l.used_at ? String(l.used_at) : undefined,
+    usedAt: l.used_at ? versInstant(l.used_at) : undefined,
   };
 }
 
