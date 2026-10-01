@@ -452,30 +452,64 @@ export async function marquerPayee(
  * L'ecriture est conditionnelle sur le statut : un billet presente deux fois
  * ne modifie aucune ligne la seconde fois, ce qui est precisement le controle
  * attendu a une porte.
+ *
+ * Elle est aussi conditionnelle sur le reglement de la commande, et ce ne
+ * l'etait pas.
+ *
+ * Les billets naissent `valid` des la commande, payee ou non — c'est ainsi que
+ * le stock est tenu. Le controle ne regardait que cet etat : il suffisait donc
+ * de commander sans jamais payer pour entrer. Le defaut etait discret tant que
+ * le code n'etait qu'une chaine a recopier ; un code QR en aurait fait une
+ * porte ouverte.
  */
 export async function validerBillet(
   eventSlug: string,
   code: string,
 ): Promise<{ ok: boolean; ticket?: Ticket; raison?: string }> {
+  const propre = (code || '').trim().toUpperCase();
+
   const r = await query(
     `UPDATE tickets SET status = 'used', used_at = now()
       WHERE event_slug = $1 AND code = $2 AND status = 'valid'
+        AND order_id IN (SELECT id FROM orders WHERE status = 'paid')
       RETURNING *`,
-    [eventSlug, (code || '').trim().toUpperCase()],
+    [eventSlug, propre],
   );
 
   if (r.rowCount === 1) {
     return { ok: true, ticket: versBillet(r.rows[0]) };
   }
 
+  /*
+   * L'ecriture n'a rien change : il faut dire pourquoi. Celui qui tient la
+   * porte doit pouvoir trancher — renvoyer vers la caisse, ou refuser.
+   */
   const existant = await query(
-    `SELECT * FROM tickets WHERE event_slug = $1 AND code = $2`,
-    [eventSlug, (code || '').trim().toUpperCase()],
+    `SELECT t.*, o.status AS order_status
+       FROM tickets t JOIN orders o ON o.id = t.order_id
+      WHERE t.event_slug = $1 AND t.code = $2`,
+    [eventSlug, propre],
   );
 
   if (existant.rowCount === 0) return { ok: false, raison: 'Billet inconnu.' };
 
-  const t = versBillet(existant.rows[0]);
+  const ligne = existant.rows[0];
+  const t = versBillet(ligne);
+  const etatCommande = String(ligne.order_status);
+
+  if (t.status === 'valid') {
+    return {
+      ok: false,
+      ticket: t,
+      raison:
+        etatCommande === 'pending'
+          ? 'Commande non réglée : à encaisser avant l’entrée.'
+          : etatCommande === 'cancelled'
+            ? 'Commande annulée.'
+            : 'Commande remboursée.',
+    };
+  }
+
   return {
     ok: false,
     ticket: t,

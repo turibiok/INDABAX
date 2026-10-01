@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Loader2, Search, Ticket, XCircle } from 'lucide-react';
 
 import { CommandeDuParticipant, evenementPublic, mesBillets, prix } from '../../services/plateforme';
@@ -192,24 +193,57 @@ export const MesBillets: React.FC<MesBilletsProps> = ({ slug, onRetour }) => {
                                 : 'border-stone-200 dark:border-stone-800'
                             }`}
                           >
+                            {/*
+                              * Fond blanc impose, en thème clair comme en thème sombre.
+                              * Un code QR sombre sur fond sombre ne se lit pas : la
+                              * lecture repose sur le contraste entre les cases, et c'est
+                              * a l'entree, sur un ecran de telephone, que ca compte.
+                              *
+                              * Le contenu est le code seul — exactement ce que le
+                              * controle attend. Y mettre une adresse ou du JSON
+                              * obligerait le scanner a en extraire le code, pour rien.
+                              */}
+                            <div className="bg-white p-2 rounded-lg shrink-0">
+                              <QRCodeSVG
+                                value={billet.code}
+                                size={72}
+                                level="M"
+                                marginSize={0}
+                                title={`Billet ${billet.code}`}
+                                // Un billet deja utilise ou non reglé reste affiche en
+                                // noir : il doit pouvoir etre scanné, pour que la porte
+                                // lise le refus du serveur plutot qu'un code illisible.
+                                fgColor="#000000"
+                                bgColor="#FFFFFF"
+                              />
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <p className="font-mono font-bold text-sm tracking-wide break-all">
+                                {billet.code}
+                              </p>
+                              {billet.holderName && (
+                                <p className="text-xs text-stone-500 mt-0.5">{billet.holderName}</p>
+                              )}
+
+                              {billet.usedAt && (
+                                <p className="text-[11px] font-bold text-stone-500 mt-1">
+                                  déjà utilisé
+                                </p>
+                              )}
+
+                              {!utilisable && !billet.usedAt && (
+                                <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 mt-1">
+                                  pas encore valable
+                                </p>
+                              )}
+                            </div>
+
                             <Ticket
                               className={`w-4 h-4 shrink-0 ${
                                 utilisable ? 'text-emerald-700 dark:text-emerald-400' : 'text-stone-400'
                               }`}
                             />
-
-                            <div className="flex-1 min-w-0">
-                              <p className="font-mono font-bold text-sm tracking-wide">{billet.code}</p>
-                              {billet.holderName && (
-                                <p className="text-xs text-stone-500">{billet.holderName}</p>
-                              )}
-                            </div>
-
-                            {billet.usedAt && (
-                              <span className="text-[11px] font-bold text-stone-500 shrink-0">
-                                déjà utilisé
-                              </span>
-                            )}
                           </div>
                         ))}
                       </div>
@@ -220,7 +254,8 @@ export const MesBillets: React.FC<MesBilletsProps> = ({ slug, onRetour }) => {
             </div>
 
             <p className="text-xs text-stone-500 mt-5">
-              Présentez le code de chaque billet à l’entrée. Un billet ne sert qu’une fois.
+              Présentez le code QR de chaque billet à l’entrée — ou le code écrit en dessous, si
+              le lecteur ne fonctionne pas. Un billet ne sert qu’une fois.
             </p>
           </>
         )}
