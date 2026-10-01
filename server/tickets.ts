@@ -405,6 +405,27 @@ export async function commande(orderId: string): Promise<Order | undefined> {
   return r.rowCount ? versCommande(r.rows[0]) : undefined;
 }
 
+/**
+ * Les commandes d'un acheteur sur un evenement.
+ *
+ * Reservee a un appelant qui a deja prouve etre cet acheteur : la liste
+ * contient des noms, des telephones et de quoi savoir qui vient. On ne la sert
+ * jamais sur la seule foi d'une adresse — voir la route qui l'emploie.
+ */
+export async function commandesDeLAcheteur(
+  eventSlug: string,
+  email: string,
+): Promise<Order[]> {
+  const r = await query(
+    `SELECT * FROM orders
+      WHERE event_slug = $1 AND lower(buyer_email) = lower($2)
+      ORDER BY created_at DESC`,
+    [eventSlug, email],
+  );
+
+  return r.rows.map(versCommande);
+}
+
 /** Marque une commande comme payee. Appele apres confirmation du prestataire. */
 export async function marquerPayee(
   orderId: string,

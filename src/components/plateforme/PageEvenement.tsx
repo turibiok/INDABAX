@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, CalendarDays, CheckCircle2, Loader2, MapPin, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, Ticket, CalendarDays, CheckCircle2, Loader2, MapPin, Minus, Plus } from 'lucide-react';
 
 import {
   BilletPropose,
@@ -21,13 +21,15 @@ import { periodeEvenement } from '../../eventFormat';
 
 interface PageEvenementProps {
   slug: string;
+  /** Ouvre l'écran où un participant retrouve ses billets. */
+  onMesBillets: () => void;
   onRetour: () => void;
 }
 
 /** Le maximum accepte par commande, aligne sur ce que le serveur refuse. */
 const MAX_PAR_COMMANDE = 20;
 
-export const PageEvenement: React.FC<PageEvenementProps> = ({ slug, onRetour }) => {
+export const PageEvenement: React.FC<PageEvenementProps> = ({ slug, onRetour, onMesBillets }) => {
   const [evenement, setEvenement] = useState<EvenementPublic | null>(null);
   const [billets, setBillets] = useState<BilletPropose[]>([]);
   const [quantites, setQuantites] = useState<Record<string, number>>({});
@@ -39,6 +41,14 @@ export const PageEvenement: React.FC<PageEvenementProps> = ({ slug, onRetour }) 
   const [telephone, setTelephone] = useState('');
   const [envoi, setEnvoi] = useState(false);
   const [codes, setCodes] = useState<string[] | null>(null);
+
+  /**
+   * La reference de la commande, montree apres l'achat.
+   *
+   * Sans elle l'ecran « mes billets » serait inutilisable : c'est elle qu'on y
+   * saisit. Elle etait rendue par le serveur et jetee aussitot.
+   */
+  const [reference, setReference] = useState<string | null>(null);
 
   useEffect(() => {
     let abandonne = false;
@@ -105,6 +115,7 @@ export const PageEvenement: React.FC<PageEvenementProps> = ({ slug, onRetour }) 
       });
 
       setCodes(r.tickets.map(t => t.code));
+      setReference(r.order.id);
     } catch (e: any) {
       setErreur(e?.message || "L'inscription n'a pas abouti.");
 
@@ -145,12 +156,26 @@ export const PageEvenement: React.FC<PageEvenementProps> = ({ slug, onRetour }) 
       <div className="h-2" style={{ backgroundColor: evenement.primaryColor || '#047857' }} />
 
       <div className="max-w-5xl mx-auto px-4 py-6">
-        <button
-          onClick={onRetour}
-          className="text-sm font-bold text-stone-600 dark:text-stone-400 hover:text-emerald-700 cursor-pointer flex items-center gap-1.5 mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" /> Tous les événements
-        </button>
+        <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+          <button
+            onClick={onRetour}
+            className="text-sm font-bold text-stone-600 dark:text-stone-400 hover:text-emerald-700 cursor-pointer flex items-center gap-1.5"
+          >
+            <ArrowLeft className="w-4 h-4" /> Tous les événements
+          </button>
+
+          {/*
+            * Propose avant l'achat autant qu'apres : quelqu'un qui revient
+            * chercher son billet arrive sur cette page, et non sur un courriel
+            * qu'il a peut-etre perdu.
+            */}
+          <button
+            onClick={onMesBillets}
+            className="text-sm font-bold text-stone-600 dark:text-stone-400 hover:text-emerald-700 cursor-pointer flex items-center gap-1.5"
+          >
+            <Ticket className="w-4 h-4" /> Mes billets
+          </button>
+        </div>
 
         <div className="grid md:grid-cols-[2fr_3fr] gap-8 items-start">
           {evenement.posterUrl && (

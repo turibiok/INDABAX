@@ -319,6 +319,43 @@ export function commander(
 }
 
 /* ------------------------------------------------------------------ *
+ * Espace participant
+ * ------------------------------------------------------------------ */
+
+export interface CommandeDuParticipant {
+  order: {
+    id: string;
+    status: 'pending' | 'paid' | 'cancelled' | 'refunded';
+    totalMinor: number;
+    currency: string;
+    createdAt: string;
+    paidAt?: string;
+    buyerName: string;
+    buyerEmail: string;
+  };
+  billets: { code: string; holderName: string; usedAt?: string }[];
+}
+
+/**
+ * Retrouve ses commandes à partir d'une référence et de son adresse.
+ *
+ * Les deux sont exigés : la référence est un identifiant qu'on ne devine pas,
+ * et l'adresse évite qu'une référence égarée suffise à lire la commande.
+ */
+export async function mesBillets(
+  slug: string,
+  reference: string,
+  email: string,
+): Promise<CommandeDuParticipant[]> {
+  const r = await appel<{ orders: { order: any; tickets: any[] }[] }>(
+    `/api/billetterie/${encodeURIComponent(slug)}/mes-billets`,
+    { method: 'POST', body: { reference, email } },
+  );
+
+  return (r.orders || []).map(o => ({ order: o.order, billets: o.tickets || [] }));
+}
+
+/* ------------------------------------------------------------------ *
  * Mise en forme
  * ------------------------------------------------------------------ */
 

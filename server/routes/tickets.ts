@@ -6,6 +6,8 @@ import { AuthedRequest, requireAuth } from '../sessions';
 import {
   annulerCommande,
   billetsDeCommande,
+  commande,
+  commandesDeLAcheteur,
   creerTypeDeBillet,
   marquerPayee,
   passerCommande,
@@ -222,6 +224,86 @@ ticketsRouter.post('/:slug/check-in', requireAuth, async (req: AuthedRequest, re
 });
 
 /** Confirme le paiement d'une commande. */
+/* ------------------------------------------------------------------ *
+ * Espace participant
+ * ------------------------------------------------------------------ */
+
+/**
+ * Retrouve ses commandes et ses billets.
+ *
+ * Ouvert a tous, sans compte : un participant qui a achete un billet n'a
+ * aucune raison d'avoir un compte sur la plateforme.
+ *
+ * La reference de commande fait office de preuve. C'est un UUID, qu'on ne
+ * devine pas, et il a ete remis a l'acheteur au moment de l'achat. L'adresse
+ * est exigee en plus : une reference egaree — dans un historique de navigateur,
+ * sur une capture d'ecran — ne suffit alors pas a lire la commande.
+ *
+ * Les deux reunis prouvent qu'on est bien l'acheteur, et la reponse donne
+ * alors toutes ses commandes sur cet evenement. C'est deliberé : sans cela, il
+ * faudrait une reference par commande, et quelqu'un qui a achete deux fois en
+ * aurait perdu une.
+ *
+ * L'echec est volontairement muet sur sa cause. Dire « cette reference existe
+ * mais l'adresse ne correspond pas » apprendrait a qui tatonne qu'il tient une
+ * vraie reference.
+ */
+ticketsRouter.post('/:slug/mes-billets', async (req, res) => {
+  if (!exigeBase(res)) return;
+
+  const corps = req.body || {};
+  const reference = String(corps.reference || '').trim();
+  const email = String(corps.email || '').trim().toLowerCase();
+
+  if (!reference || !email) {
+    return res.status(400).json({
+      error: 'Indiquez la référence de votre commande et votre adresse e-mail.',
+      reason: 'missing_fields',
+    });
+  }
+
+  const muet = {
+    error:
+      'Aucune commande ne correspond. Vérifiez la référence et l’adresse utilisée lors de l’achat.',
+    reason: 'not_found',
+  };
+
+  try {
+    const preuve = await commande(reference);
+
+    /*
+     * Les trois conditions comptent autant : la commande existe, elle porte
+     * bien sur cet evenement, et elle a ete passee avec cette adresse.
+     */
+    if (
+      !preuve ||
+      preuve.eventSlug !== req.params.slug ||
+      preuve.buyerEmail.toLowerCase() !== email
+    ) {
+      return res.status(404).json(muet);
+    }
+
+    const commandes = await commandesDeLAcheteur(req.params.slug, email);
+
+    const avecBillets = await Promise.all(
+      commandes.map(async order => ({
+        order,
+        /*
+         * Les billets existent des la commande, reglee ou non : c'est
+         * `passerCommande` qui les engendre, pour tenir le stock. Leur code est
+         * donc visible avant paiement, et l'ecran doit dire clairement lesquels
+         * sont valables — un code seul ne prouve rien.
+         */
+        tickets: await billetsDeCommande(order.id),
+      })),
+    );
+
+    res.json({ orders: avecBillets });
+  } catch (error) {
+    repondreErreur(res, error);
+  }
+});
+
 ticketsRouter.post('/:slug/orders/:id/paid', requireAuth, async (req: AuthedRequest, res) => {
   if (!exigeBase(res)) return;
 

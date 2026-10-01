@@ -6,6 +6,7 @@ import { ComptePlateforme, mesEvenements } from '../../services/plateforme';
 import { ConnexionPlateforme } from './ConnexionPlateforme';
 import { CreerEvenement } from './CreerEvenement';
 import { MesEvenements } from './MesEvenements';
+import { MesBillets } from './MesBillets';
 import { MonCompte } from './MonCompte';
 import { PageEvenement } from './PageEvenement';
 import { TableauDeBord } from './TableauDeBord';
@@ -38,16 +39,25 @@ type Vue =
   | { nom: 'creation' }
   | { nom: 'plateforme' }
   | { nom: 'connexion' }
-  | { nom: 'mon-compte' };
+  | { nom: 'mon-compte' }
+  | { nom: 'mes-billets'; slug: string };
 
 /** Lit la vue depuis l'adresse. */
 function vueDepuisAdresse(): Vue {
   const params = new URLSearchParams(window.location.search);
 
   const slug = params.get('evenement');
-  if (slug) return { nom: 'evenement', slug };
-
   const espace = params.get('espace');
+
+  /*
+   * L'evenement est lu avant l'espace, mais pas a sa place : les deux se
+   * combinent pour « mes billets », qui porte sur un evenement precis. Sans
+   * cela, un lien complet retombait sur la page publique de l'evenement.
+   */
+  if (slug) {
+    return espace === 'mes-billets' ? { nom: 'mes-billets', slug } : { nom: 'evenement', slug };
+  }
+
   if (espace === 'mes-evenements') return { nom: 'mes-evenements' };
   if (espace === 'creation') return { nom: 'creation' };
   if (espace === 'plateforme') return { nom: 'plateforme' };
@@ -65,6 +75,13 @@ function poserAdresse(vue: Vue) {
   params.delete('espace');
 
   if (vue.nom === 'evenement') params.set('evenement', vue.slug);
+
+  // L'adresse porte l'evenement et l'intention : un lien « mes billets » envoye
+  // par un organisateur ouvre donc directement le bon ecran.
+  if (vue.nom === 'mes-billets') {
+    params.set('evenement', vue.slug);
+    params.set('espace', 'mes-billets');
+  }
   if (vue.nom === 'mes-evenements') params.set('espace', 'mes-evenements');
   if (vue.nom === 'creation') params.set('espace', 'creation');
   if (vue.nom === 'plateforme') params.set('espace', 'plateforme');
@@ -152,8 +169,20 @@ export const Plateforme: React.FC<PlateformeProps> = ({ connecte, onConnexion })
     );
   }
 
+  if (vue.nom === 'mes-billets') {
+    return (
+      <MesBillets slug={vue.slug} onRetour={() => aller({ nom: 'evenement', slug: vue.slug })} />
+    );
+  }
+
   if (vue.nom === 'evenement') {
-    return <PageEvenement slug={vue.slug} onRetour={() => aller({ nom: 'vitrine' })} />;
+    return (
+      <PageEvenement
+        slug={vue.slug}
+        onRetour={() => aller({ nom: 'vitrine' })}
+        onMesBillets={() => aller({ nom: 'mes-billets', slug: vue.slug })}
+      />
+    );
   }
 
   if (vue.nom === 'creation') {
