@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { authRouter } from "./server/routes/auth";
 import { sheetsRouter } from "./server/routes/sheets";
@@ -200,6 +199,16 @@ async function preparerApplication() {
   await warmSocialCache();
 
   if (process.env.NODE_ENV !== "production") {
+    /*
+     * Vite n'est charge qu'ici, et seulement hors production.
+     *
+     * Un import au sommet du fichier l'entraine dans le paquet deploye, avec
+     * tout ce qu'il traine — rollup et ses binaires propres a chaque
+     * plateforme. La fonction deployee refusait de demarrer pour cette raison,
+     * alors qu'elle n'a jamais besoin d'un serveur de developpement.
+     */
+    const { createServer: createViteServer } = await import("vite");
+
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

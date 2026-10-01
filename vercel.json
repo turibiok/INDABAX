@@ -3,16 +3,19 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
-
   "functions": {
-    "api/index.ts": {
-      "runtime": "@vercel/node@5.1.11",
+    "api/index.js": {
       "maxDuration": 30
     }
   },
-
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }

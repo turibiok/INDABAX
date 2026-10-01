@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "dev": "tsx app.ts",
+    "build": "vite build && esbuild app.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && npm run build:serverless",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -13,7 +13,8 @@
     "test": "tsx src/lib/sheets.test.ts && tsx src/services/appsScript.test.ts && tsx server/eventConfig.test.ts && tsx server/platform.test.ts && tsx server/tickets.test.ts && tsx server/db.test.ts && tsx src/services/plateforme.test.ts && tsx server/fedapay.test.ts",
     "docs:sheets": "tsx scripts/generate-sheet-docs.ts",
     "db:setup": "tsx server/cli/db.ts setup",
-    "db:status": "tsx server/cli/db.ts status"
+    "db:status": "tsx server/cli/db.ts status",
+    "build:serverless": "esbuild serverless/handler.ts --bundle --platform=node --format=esm --packages=external --outfile=api/index.js"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -48,5 +49,8 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

@@ -1,12 +1,17 @@
-node_modules/
-build/
-dist/
-.vite/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
 
+!.env.example
 # État serveur : configuration du classeur, secrets d'écriture, comptes
+*.log
+.DS_Store
 .data/
+.env*
+.env.local
+.vercel
+.vercel/
+.vite/
+api/index.js
+api/index.js.map
+build/
+coverage/
+dist/
+node_modules/
